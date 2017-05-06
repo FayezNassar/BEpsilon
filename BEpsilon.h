@@ -458,14 +458,14 @@ vector<Value> BEpsilonTree<Key, Value, B>::rangeQuery(Key minKey, Key maxKey) {
     vector<Value> res;
     if (root != NULL) {
         //get appropriate leafs
-        Node *minNode = root->approximateSearch(minKey);
-        Node *maxNode = root->approximateSearch(maxKey);
-        Node *current = minNode;
+        Node *current = root->approximateSearch(minKey);
+        Value maxFound = minKey;
 
-        while (current != NULL) {
+        while (current != NULL && maxKey >= maxFound) {
             for (int i = 0; i < current->keys.size(); ++i) {
                 if (minKey <= current->keys[i] && current->keys[i] <= maxKey) {
                     res.push_back(current->values[i]);
+                    maxFound = current->keys[i];
                 }
             }
             current = current->right_sibling;
