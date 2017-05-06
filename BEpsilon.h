@@ -37,6 +37,11 @@ private:
     typedef class Node {
     public:
 
+        typedef enum {
+            left,
+            right
+        } Direction;
+
         Node(bool leaf, Node* parent = NULL,  Node* right_sibling = NULL, Node* left_sibling = NULL);
 
         /**
@@ -59,9 +64,10 @@ private:
         */
         Node *approximateSearch(Key key);
 
-        // A function that returns the index of the first key that is greater
-        // or equal to k
-        int findKey(Key key);
+        // A function that returns the index of the key in the parent that that point to this
+        // the assumption is that parent != NULL and this node have some keys.
+        //unused for now.
+        int getKeyOrder();
 
         //A function to find the index of this node in the his parent children vector
         //the assumption is this->parent != NULL.
@@ -77,6 +83,11 @@ private:
         //should call after the key-value insertion from the leaf.
         void insertKeysUpdate();
 
+        bool isSiblingBorrowable(Direction direction);
+
+        bool isSiblingMergeable(Direction direction);
+
+        void mergeKeysUpdate(int child_ix);
         //A utility function to make sure that all the leaf is on the same height.
         //should call after the key-value remove from the leaf.
         void removeKeysUpdate();
@@ -131,6 +142,16 @@ bool BEpsilonTree<Key, Value, B>::Node::isEmpty() {
 };
 
 template<typename Key, typename Value, int B>
+int BEpsilonTree<Key, Value, B>::Node::getKeyOrder() {
+    //for sure this node isn't root and full, we check it before this function call.
+    int ix = 0;
+    while(ix < this->parent->keys.size() && this->parent->keys[ix] <= this->keys[0]) {
+        ix++;
+    }
+    return ix;
+};
+
+template<typename Key, typename Value, int B>
 int BEpsilonTree<Key, Value, B>::Node::getOrder() {
     int ix = 0;
     //for sure this node isn't root and full, we check it before this function call.
@@ -156,10 +177,13 @@ void BEpsilonTree<Key, Value, B>::Node::splitChild(int ix, BEpsilonTree<Key, Val
 
     //update the sibling of both child and new node, add the new node between the child and the new node.
     //if the nods is internal and not a leaf, the sibling will be NULL.
+    if(left_child->right_sibling != NULL) {
+        left_child->right_sibling->left_sibling = right_child;
+    }
     right_child->left_sibling = left_child;
     right_child->right_sibling = left_child->right_sibling;
     left_child->right_sibling = right_child;
-    //left_child->left_sibling doesn't change.
+    //left_child->left_sibling and left_child->right_sibling->right_sibling doesn't change.
 
     //update to move the minimum number of children for each node, and not 1.
     //B should be grater than 2, else infinite loop will occur.
@@ -237,6 +261,109 @@ void BEpsilonTree<Key, Value, B>::Node::insertKeysUpdate() {
     }
 };
 
+template<typename Key, typename Value, int B>
+bool BEpsilonTree<Key, Value, B>::Node::isSiblingBorrowable(Direction direction) {
+    if(this->parent == NULL) {
+        return false;
+    }
+    int child_ix = this->getOrder();
+    if((child_ix == 0 && direction == left) || (child_ix == this->parent->children.size()-1 && direction == right)) {
+        return false;
+    }
+    Node* sibling = direction == left ? this->parent->children[child_ix-1] : this->parent->children[child_ix+1];
+    return sibling != NULL && sibling->keys.size() > B/2;
+};
+
+template<typename Key, typename Value, int B>
+bool BEpsilonTree<Key, Value, B>::Node::isSiblingMergeable(Direction direction) {
+    Node* sibling = direction == left ? this->left_sibling : this->right_sibling;
+    return sibling != NULL && (sibling->keys.size() + this->keys.size() <= B);
+};
+
+template<typename Key, typename Value, int B>
+void BEpsilonTree<Key, Value, B>::Node::mergeKeysUpdate(int child_ix) {
+    if(child_ix > 0) {
+        this->keys.erase(this->keys.begin()+(child_ix-1), this->keys.begin()+(child_ix-1));
+        this->children.erase(this->children.begin()+child_ix, this->children.begin()+child_ix);
+    } else if (this->parent != NULL) {
+        int parent_ix = this->getOrder();
+        this->parent->keys[parent_ix > 0 ? parent_ix-1 : 0] = this->keys[0];
+    }
+};
+
+template<typename Key, typename Value, int B>
+void BEpsilonTree<Key, Value, B>::Node::removeKeysUpdate() {
+
+    if(!this->isEmpty()) {
+        //we shouldn't move keys from node to other,
+        // but we yes should update the parent key to have the minimum key in this node in the case of minimum key remove
+        if(parent != NULL && this->parent->keys.size() > 0) {
+            int child_ix = this->getOrder();
+
+            if(child_ix > 0) {
+                this->parent->keys[child_ix-1] = this->keys[0];
+            } else {
+                //if child_ix == 0; we need to update the keys[0] to have the max key in the child;
+                //int key_ix   = child_ix == 0 ? 0 : child_ix-1;
+                //int key = child_ix == 0 ? this->keys[this->keys.size()-1] : this->keys[0];
+                //this->parent->keys[key_ix] = key;
+            }
+        }
+    } else {
+        //check list:
+        //1. borrow from the left  sibling.
+        //2. merge with the left sibling.
+        //3. borrow from the right sibling.
+        //4. merge with the right sibling.
+
+        //1-
+        if(this->isSiblingBorrowable(left)) {
+            //most borrow the maximum element.
+            this->keys.insert(this->keys.begin(),
+                              this->left_sibling->keys.end()-1,
+                              this->left_sibling->keys.end());
+            this->left_sibling->keys.erase(this->left_sibling->keys.end()-1,
+                                           this->left_sibling->keys.end());
+
+            //to make sure that the appropriate key at the parent is valid.
+            int child_ix = this->getOrder();
+            int key_ix = child_ix == 0 ? 0 : child_ix - 1;
+            this->parent->keys[key_ix] = this->keys[0];
+
+            if(this->leaf) {
+                this->values.insert(this->values.begin(),
+                                    this->left_sibling->values.end()-1,
+                                    this->left_sibling->values.end());
+                this->left_sibling->values.erase(this->left_sibling->values.end()-1,
+                                                 this->left_sibling->values.end());
+            } else {
+                //TODO check it.
+                this->children.insert(this->children.begin(),
+                                      this->left_sibling->children.end()-1,
+                                      this->left_sibling->children.end());
+                this->left_sibling->children.erase(this->left_sibling->children.end()-1,
+                                                   this->left_sibling->children.end());
+            }
+        } else if (this->isSiblingBorrowable(right)) {
+            //3-
+            //most borrow the maximum element.
+            this->keys.insert(this->keys.end(),
+                              this->right_sibling->keys[0]);
+            this->right_sibling->keys.erase(this->right_sibling->keys.begin());
+
+            if(this->leaf) {
+                this->values.insert(this->values.end(),
+                                    this->right_sibling->values[0]);
+                this->right_sibling->values.erase(this->right_sibling->values.begin());
+            } else {
+                this->children.insert(this->children.end(),
+                                      this->right_sibling->children[0]);
+                this->right_sibling->children.erase(this->right_sibling->children.begin());
+            }
+        }
+    }
+};
+
 template <typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::Node::insert(Key key, Value value) {
 
@@ -283,7 +410,9 @@ void BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
     while(ix >= 0 && ix < this->keys.size() && this->keys[ix] > key) {
         ix--;
     }
-
+    if(ix == -1) {
+        ix = 0;
+    }
     if(this->leaf) {
         if(this->keys[ix] == key) {
             this->keys.erase(this->keys.begin()+ix);
