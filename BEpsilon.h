@@ -468,7 +468,7 @@ vector<Value> BEpsilonTree<Key, Value, B>::rangeQuery(Key minKey, Key maxKey) {
                     res.push_back(current->values[i]);
                 }
             }
-            current = current->sibling;
+            current = current->right_sibling;
         }
     }
     return res;
