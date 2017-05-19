@@ -412,6 +412,12 @@ void BEpsilonTree<Key, Value, B>::Node::balance(Node* child) {
         }
     }
     if(child && child->isLeaf && child->keys.size() == 0){
+        if(child->left_sibling){
+            child->left_sibling->right_sibling = NULL;
+        }
+        if(child->right_sibling){
+            child->right_sibling->left_sibling = NULL;
+        }
         delete child;
     }
     if (parent) {
