@@ -391,8 +391,9 @@ void BEpsilonTree<Key, Value, B>::Node::updateParentKeys() {
 
         if(this->keys.size() == 0){
             this->parent->children.erase(parent->children.begin() + child_ix);
+            this->parent->keys.erase(parent->keys.begin() + updateIdx);
         } else{
-            this->parent->keys[updateIdx] = this->keys[(child_ix > 0) ? 0 : 0];
+            this->parent->keys[updateIdx] = this->keys[(child_ix > 0) ? 0 : this->keys.size() - 1];
         }
     }
 };
@@ -474,7 +475,7 @@ void BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
             this->balance(NULL);
         }
     } else {
-        if (this->keys[ix] < key) {
+        if (this->keys[ix] <= key) {
             ix++;
         }
         this->children[ix]->remove(key);
