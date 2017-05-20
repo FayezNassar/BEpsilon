@@ -148,7 +148,7 @@ bool BEpsilonTree<Key, Value, B>::Node::isFull() {
 
 template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::Node::isSettled() {
-    return this->keys.size() >= B / 2;
+    return this->keys.size() > B / 2;
 };
 
 template<typename Key, typename Value, int B>
@@ -368,15 +368,16 @@ void BEpsilonTree<Key, Value, B>::Node::mergeWithLeft() {
 template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::Node::mergeWithRight() {
     while (keys.size() > 0) {
-        left_sibling->keys.insert(left_sibling->keys.begin(), keys[keys.size() - 1]);
+//        keys[keys.size() - 1]
+        right_sibling->keys.insert(right_sibling->keys.begin(), right_sibling->children[0]->keys[0] );
         keys.pop_back();
     }
     while (values.size() > 0) {
-        left_sibling->values.insert(left_sibling->values.begin(), values[values.size() - 1]);
+        right_sibling->values.insert(right_sibling->values.begin(), values[values.size() - 1]);
         values.pop_back();
     }
     while (children.size() > 0) {
-        left_sibling->children.insert(left_sibling->children.begin(), children[children.size() - 1]);
+        right_sibling->children.insert(right_sibling->children.begin(), children[children.size() - 1]);
         children.pop_back();
     }
 }
@@ -391,9 +392,11 @@ void BEpsilonTree<Key, Value, B>::Node::updateParentKeys() {
 
         if(this->keys.size() == 0){
             this->parent->children.erase(parent->children.begin() + child_ix);
-            this->parent->keys.erase(parent->keys.begin() + updateIdx);
+            if(parent->children.size() == 0){
+                this->parent->keys.erase(parent->keys.begin() + updateIdx);
+            }
         } else{
-            this->parent->keys[updateIdx] = this->keys[(child_ix > 0) ? 0 : this->keys.size() - 1];
+//            this->parent->keys[updateIdx] = this->keys[(child_ix > 0) ? 0 : this->keys.size() - 1];
         }
     }
 };
@@ -410,19 +413,19 @@ void BEpsilonTree<Key, Value, B>::Node::balance(Node* child) {
                 mergeWithRight();
             }
         }
-    }
-    if(child && child->isLeaf && child->keys.size() == 0){
-        if(child->left_sibling){
-            child->left_sibling->right_sibling = NULL;
+        if (child && child->keys.size() == 0) {
+            if (child->left_sibling) {
+                child->left_sibling->right_sibling = child->right_sibling;
+            }
+            if (child->right_sibling) {
+                child->right_sibling->left_sibling = child->left_sibling;
+            }
+            delete child;
         }
-        if(child->right_sibling){
-            child->right_sibling->left_sibling = NULL;
+        if (parent) {
+            updateParentKeys();
+            parent->balance(this);
         }
-        delete child;
-    }
-    if (parent) {
-        updateParentKeys();
-        parent->balance(this);
     }
 };
 
