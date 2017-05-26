@@ -1,6 +1,8 @@
 #ifndef BEPSILON_BEPSILON_H
 #define BEPSILON_BEPSILON_H
 
+#include <sstream>
+#include <iomanip>
 #include <iostream>
 #include <vector>
 
@@ -31,6 +33,8 @@ public:
     vector<Value> rangeQuery(Key minKey, Key maxKey);
 
     void remove(Key key);
+
+    void printTree();
 
 private:
 
@@ -100,6 +104,8 @@ private:
         //the tree will not affected if the key isn't existing.
         void remove(Key key);
 
+        void inOrder(int indent = 0);
+
         bool tryBorrowFromLeft();
 
         bool tryBorrowFromRight();
@@ -128,7 +134,6 @@ private:
         //if the node is internal
         //children.size() == keys.size()+1;
         vector<Node *> children;
-
         friend class BEpsilonTree;
 
     } Node;
@@ -543,6 +548,24 @@ void BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
     return;
 };
 
+template<typename Key, typename Value, int B>
+void BEpsilonTree<Key, Value, B>::Node::inOrder(int indent) {
+    if(!leaf) {
+        this->children[this->children.size()-1]->inOrder(indent + 4);
+    }
+    for(int i = this->keys.size()-1 ; i >= 0 ; i--) {
+        if(indent > 0) {
+            cout << setw(indent) << ' ';
+        }
+        cout << setw(indent) << this->keys[i] << endl;
+        if(!leaf) {
+            this->children[i]->inOrder(indent + 4);
+        }
+    }
+    cout << setw(indent) << ' ';
+    cout << setw(indent) << "----" << endl;
+}
+
 /*
  * the API B+ function
  * insert: A function for insertion to the tree
@@ -607,6 +630,13 @@ void BEpsilonTree<Key, Value, B>::remove(Key key) {
             delete root->parent;
             root->parent = NULL;
         }
+    }
+};
+
+template<typename Key, typename Value, int B>
+void BEpsilonTree<Key, Value, B>::printTree() {
+    if(root != NULL) {
+        root->inOrder();
     }
 };
 
