@@ -550,7 +550,7 @@ void BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
 
 template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::Node::inOrder(int indent) {
-    if(!leaf) {
+    if(!isLeaf) {
         this->children[this->children.size()-1]->inOrder(indent + 4);
     }
     for(int i = this->keys.size()-1 ; i >= 0 ; i--) {
@@ -558,7 +558,7 @@ void BEpsilonTree<Key, Value, B>::Node::inOrder(int indent) {
             cout << setw(indent) << ' ';
         }
         cout << setw(indent) << this->keys[i] << endl;
-        if(!leaf) {
+        if(!isLeaf) {
             this->children[i]->inOrder(indent + 4);
         }
     }
