@@ -317,6 +317,8 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromLeft() {
         }
 
         this->left_sibling->keys.pop_back();
+        left_sibling->updateParentKeys();
+        updateParentKeys();
         return true;
     }
 
@@ -339,6 +341,8 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromRight() {
         }
 
         this->right_sibling->keys.erase(this->right_sibling->keys.begin());
+        right_sibling->updateParentKeys();
+        this->updateParentKeys();
         return true;
     }
 
@@ -447,7 +451,7 @@ template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::Node::balance(Node *child) {
     if (child && child->keys.size() == 0) {
 
-            child->updateParentKeys();
+        child->updateParentKeys();
 
         if (child->left_sibling) {
             child->left_sibling->right_sibling = child->right_sibling;
