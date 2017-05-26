@@ -152,10 +152,7 @@ bool BEpsilonTree<Key, Value, B>::Node::isFull() {
 
 template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::Node::isNotLegal() {
-    if(isLeaf){
-        return this->keys.size() < B / 2;
-    }
-    return this->keys.size() >= this->children.size();
+    return this->keys.size() < B / 2;
 };
 
 template<typename Key, typename Value, int B>
@@ -309,7 +306,9 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromLeft() {
                                 this->left_sibling->values.end() - 1,
                                 this->left_sibling->values.end());
             this->left_sibling->values.pop_back();
+            this->keys.insert(this->keys.begin(), left_sibling->keys[left_sibling->keys.size()-1]);
         } else {
+            this->keys.insert(this->keys.begin(), this->children[0]->getMinSubTreeKey());
             this->children.insert(this->children.begin(),
                                   this->left_sibling->children.end() - 1,
                                   this->left_sibling->children.end());
@@ -317,7 +316,6 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromLeft() {
             this->left_sibling->children.pop_back();
         }
 
-        this->keys.insert(this->keys.begin(), this->children[0]->getMinSubTreeKey());
         this->left_sibling->keys.pop_back();
         return true;
     }
@@ -332,14 +330,14 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromRight() {
         if (this->isLeaf) {
             this->values.insert(this->values.end(),this->right_sibling->values[0]);
             right_sibling->values.erase(this->right_sibling->values.begin());
+            this->keys.insert(this->keys.end(),right_sibling->getMinSubTreeKey());
         } else {
-
+            this->keys.insert(this->keys.end(),right_sibling->children[0]->getMinSubTreeKey());
             this->children.insert(this->children.end(), this->right_sibling->children[0]);
             this->right_sibling->children[0]->parent = this;
             this->right_sibling->children.erase(this->right_sibling->children.begin());
         }
 
-        this->keys.insert(this->keys.end(),right_sibling->children[0]->getMinSubTreeKey());
         this->right_sibling->keys.erase(this->right_sibling->keys.begin());
         return true;
     }
@@ -420,9 +418,9 @@ void BEpsilonTree<Key, Value, B>::Node::updateParentKeys() {
 
         if (this->keys.size() == 0) {
             parent->children.erase(parent->children.begin() + my_index);
-//            parent->keys.erase(parent->keys.begin()+update_idx);
+            parent->keys.erase(parent->keys.begin()+update_idx);
         } else {
-            parent->keys[update_idx] = this->keys[0];
+            parent->keys[update_idx] = this->getMinSubTreeKey();
         }
     }
 };
@@ -448,11 +446,9 @@ Key BEpsilonTree<Key, Value, B>::Node::getMaxSubTreeKey(){
 template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::Node::balance(Node *child) {
     if (child && child->keys.size() == 0) {
-        for(int i=0;i<children.size();i++){
-            if(children[i] == child){
-                children.erase(children.begin()+i);
-            }
-        }
+
+            child->updateParentKeys();
+
         if (child->left_sibling) {
             child->left_sibling->right_sibling = child->right_sibling;
         }
@@ -530,7 +526,7 @@ void BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
         if (this->keys[ix] == key) {
             this->keys.erase(this->keys.begin() + ix);
             this->values.erase(this->values.begin() + ix);
-            updateParentKeys();
+//            updateParentKeys();
             this->balance(NULL);
         }
     } else {
