@@ -5,7 +5,9 @@
 #include <iomanip>
 #include <iostream>
 #include <vector>
+
 #include <assert.h>
+#include <algorithm>
 
 using namespace std;
 
@@ -110,6 +112,10 @@ private:
         void inOrder(int indent = 0);
 
         Key minSubTreeKeyTest();
+
+        void bPlusValidation();
+
+        void RI();
 
         bool tryBorrowFromLeft();
 
@@ -328,8 +334,10 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromLeft() {
 
         this->left_sibling->keys.pop_back();
         left_sibling->updateParentKeys();
+        if(this->parent != left_sibling->parent) {
+            this->updateParentKeys();
+        }
         updateMinSubTreeKey(this);
-        updateParentKeys();
         return true;
     }
 
@@ -343,7 +351,7 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromRight() {
         if (this->isLeaf) {
             this->values.insert(this->values.end(),this->right_sibling->values[0]);
             right_sibling->values.erase(this->right_sibling->values.begin());
-            this->keys.insert(this->keys.end(),right_sibling->sub_tree_min_key);
+            this->keys.insert(this->keys.end(),right_sibling->keys[0]);
 
         } else {
             this->keys.insert(this->keys.end(),right_sibling->children[0]->sub_tree_min_key);
@@ -356,7 +364,9 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromRight() {
         updateMinSubTreeKey(this);
         updateMinSubTreeKey(right_sibling);
         right_sibling->updateParentKeys();
-        this->updateParentKeys();
+        if(right_sibling->parent != this->parent) {
+            this->updateParentKeys();
+        }
         return true;
     }
 
@@ -449,9 +459,7 @@ void BEpsilonTree<Key, Value, B>::Node::updateParentKeys() {
 template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::Node::balance(Node *child) {
     if (child && child->keys.size() == 0) {
-
         child->updateParentKeys();
-
         if (child->left_sibling) {
             child->left_sibling->right_sibling = child->right_sibling;
         }
@@ -472,6 +480,9 @@ void BEpsilonTree<Key, Value, B>::Node::balance(Node *child) {
         }
     } else {
         updateMinSubTreeKey(this);
+        if(parent) {
+            this->updateParentKeys();
+        }
     }
 
     if (parent) {
@@ -593,6 +604,28 @@ Key BEpsilonTree<Key, Value, B>::Node::minSubTreeKeyTest() {
     }
     return min;
 }
+
+template<typename Key, typename Value, int B>
+void BEpsilonTree<Key, Value, B>::Node::bPlusValidation() {
+    //root can have less than B/2 keys.
+    assert((this->parent == NULL) || (this->keys.size() < B && this->keys.size() >= B/2));
+    assert(std::is_sorted(this->keys.begin(),this->keys.end()));
+    if(isLeaf) {
+        assert(this->keys.size() == this->values.size());
+    } else {
+        assert(this->keys.size()+1 == this->children.size());
+        for(Node* node : this->children) {
+            node->bPlusValidation();
+        }
+    }
+
+};
+
+template<typename Key, typename Value, int B>
+void BEpsilonTree<Key, Value, B>::Node::RI() {
+    minSubTreeKeyTest();
+    bPlusValidation();
+}
 /*
  * the API B+ function
  * insert: A function for insertion to the tree
@@ -615,7 +648,7 @@ void BEpsilonTree<Key, Value, B>::insert(Key key, Value value) {
         }
     }
     //TODO remove when analysis
-    root->minSubTreeKeyTest();
+    root->RI();
 };
 
 template<typename Key, typename Value, int B>
@@ -662,7 +695,7 @@ void BEpsilonTree<Key, Value, B>::remove(Key key) {
         }
     }
     //TODO remove when analysis
-    root->minSubTreeKeyTest();
+    root->RI();
 };
 
 template<typename Key, typename Value, int B>
