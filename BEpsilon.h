@@ -572,14 +572,13 @@ bool BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
             this->balance(NULL);
             return true;
         }
+        return false;
     } else {
         if (this->keys[ix] <= key) {
             ix++;
         }
-        this->children[ix]->remove(key);
+        return this->children[ix]->remove(key);
     }
-
-    return false;
 };
 
 template<typename Key, typename Value, int B>
@@ -664,7 +663,7 @@ void BEpsilonTree<Key, Value, B>::insert(Key key, Value value) {
         }
     }
     //TODO remove when analysis
-    root->RI();
+//    root->RI();
 };
 
 template<typename Key, typename Value, int B>
@@ -713,7 +712,7 @@ void BEpsilonTree<Key, Value, B>::remove(Key key) {
         }
     }
     //TODO remove when analysis
-    root->RI();
+//    root->RI();
 };
 
 template<typename Key, typename Value, int B>
