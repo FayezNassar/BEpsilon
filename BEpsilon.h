@@ -27,7 +27,7 @@ class InvalidKeyRange : public exception {
 template<typename Key, typename Value, int B>
 class BEpsilonTree {
 public:
-    BEpsilonTree() : root(NULL) {}
+    BEpsilonTree() : root(NULL),size_(0) {}
 
     void insert(Key key, Value value);
 
@@ -38,6 +38,10 @@ public:
     void remove(Key key);
 
     void printTree();
+
+    bool contains(Key key);
+
+    int size();
 
 private:
 
@@ -100,14 +104,14 @@ private:
 
         // A utility function to insert a new key in the subtree rooted with
         // this node.
-        void insert(Key key, Value value);
+        bool insert(Key key, Value value);
 
         static inline void updateMinSubTreeKey(Node* node);
 
         // A utility function to remove a key in the subtree rooted with
         // this node.
         //the tree will not affected if the key isn't existing.
-        void remove(Key key);
+        bool remove(Key key);
 
         void inOrder(int indent = 0);
 
@@ -147,6 +151,7 @@ private:
     } Node;
 
     Node *root;
+    int size_;
 };
 
 template<typename Key, typename Value, int B>
@@ -449,7 +454,9 @@ void BEpsilonTree<Key, Value, B>::Node::updateParentKeys() {
             parent->children.erase(parent->children.begin() + my_index);
             parent->keys.erase(parent->keys.begin()+update_idx);
         } else {
-            parent->keys[update_idx] = this->sub_tree_min_key;
+            if(my_index>update_idx){
+                parent->keys[update_idx] = this->sub_tree_min_key;
+            }
         }
         updateMinSubTreeKey(parent);
     }
@@ -501,7 +508,7 @@ void BEpsilonTree<Key, Value, B>::Node::updateMinSubTreeKey(Node* node){
 }
 
 template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::insert(Key key, Value value) {
+bool BEpsilonTree<Key, Value, B>::Node::insert(Key key, Value value) {
 
     //for finding the key position, we'll start with last index
     int ix = this->keys.size() - 1;
@@ -511,10 +518,16 @@ void BEpsilonTree<Key, Value, B>::Node::insert(Key key, Value value) {
     }
 
     if (this->isLeaf) {
+        for(Key k: this->keys){
+            if(k == key){
+                return false;
+            }
+        }
         this->keys.insert(this->keys.begin() + (ix + 1), key);
         this->values.insert(this->values.begin() + (ix + 1), value);
         this->sub_tree_min_key = this->keys[0];
         this->insertKeysUpdate();
+        return true;
     } else {//this is internal node
         ix = ix == -1 ? 0 : ix;
         if (this->keys[ix] < key) {
@@ -523,7 +536,7 @@ void BEpsilonTree<Key, Value, B>::Node::insert(Key key, Value value) {
         if(key < this->sub_tree_min_key) {
             this->sub_tree_min_key = key;
         }
-        this->children[ix]->insert(key, value);
+        return this->children[ix]->insert(key, value);
     }
 };
 
@@ -543,7 +556,7 @@ typename BEpsilonTree<Key, Value, B>::Node *BEpsilonTree<Key, Value, B>::Node::a
 }
 
 template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
+bool BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
     //the position of the key in the node.
     int ix = this->keys.size() - 1;
     while (ix >= 0 && this->keys[ix] > key) {
@@ -557,6 +570,7 @@ void BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
             this->keys.erase(this->keys.begin() + ix);
             this->values.erase(this->values.begin() + ix);
             this->balance(NULL);
+            return true;
         }
     } else {
         if (this->keys[ix] <= key) {
@@ -565,7 +579,7 @@ void BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
         this->children[ix]->remove(key);
     }
 
-    return;
+    return false;
 };
 
 template<typename Key, typename Value, int B>
@@ -642,7 +656,9 @@ void BEpsilonTree<Key, Value, B>::insert(Key key, Value value) {
         root->values.insert(root->values.begin(), value);
         root->sub_tree_min_key = key;
     } else { //if the root is not null.
-        root->insert(key, value);
+        if(root->insert(key, value)){
+            size_++;
+        }
         if (root->parent != NULL) {
             root = root->parent;
         }
@@ -687,7 +703,9 @@ Value BEpsilonTree<Key, Value, B>::pointQuery(Key key) {
 template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::remove(Key key) {
     if (root != NULL) {
-        root->remove(key);
+        if(root->remove(key)) {
+            size_--;
+        }
         if (root->children.size() == 1) {
             root = root->children[0];
             delete root->parent;
@@ -703,6 +721,21 @@ void BEpsilonTree<Key, Value, B>::printTree() {
     if(root != NULL) {
         root->inOrder();
     }
+};
+
+template<typename Key, typename Value, int B>
+bool BEpsilonTree<Key, Value, B>::contains(Key key) {
+    try{
+        pointQuery(key);
+        return true;
+    } catch(NoSuchKeyException){
+        return false;
+    }
+};
+
+template<typename Key, typename Value, int B>
+int BEpsilonTree<Key, Value, B>::size() {
+    return size_;
 };
 
 #endif //BEPSILON_BEPSILON_H
