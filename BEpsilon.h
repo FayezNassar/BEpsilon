@@ -304,7 +304,7 @@ bool BEpsilonTree<Key, Value, B>::Node::isSiblingBorrowable(Direction direction)
     }
 
     Node *sibling = direction == right ? right_sibling : left_sibling;
-    return sibling != NULL && sibling->keys.size() > B / 2;
+    return sibling != NULL && sibling->parent == this->parent && sibling->keys.size() > B / 2;
 };
 
 template<typename Key, typename Value, int B>
@@ -338,11 +338,9 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromLeft() {
         }
 
         this->left_sibling->keys.pop_back();
-        left_sibling->updateParentKeys();
-        if(this->parent != left_sibling->parent) {
-            this->updateParentKeys();
-        }
         updateMinSubTreeKey(this);
+        left_sibling->updateParentKeys();
+        this->updateParentKeys();
         return true;
     }
 
@@ -369,9 +367,7 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromRight() {
         updateMinSubTreeKey(this);
         updateMinSubTreeKey(right_sibling);
         right_sibling->updateParentKeys();
-        if(right_sibling->parent != this->parent) {
-            this->updateParentKeys();
-        }
+        this->updateParentKeys();
         return true;
     }
 
@@ -380,7 +376,7 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromRight() {
 
 template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::Node::tryMergeWithLeft() {
-    if (!left_sibling) {
+    if (!left_sibling || (left_sibling->parent != this->parent)) {
         return false;
     }
 
@@ -412,7 +408,7 @@ bool BEpsilonTree<Key, Value, B>::Node::tryMergeWithLeft() {
 
 template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::Node::tryMergeWithRight() {
-    if (!right_sibling) {
+    if (!right_sibling || (right_sibling->parent != this->parent)) {
         return false;
     }
 
@@ -545,12 +541,10 @@ typename BEpsilonTree<Key, Value, B>::Node *BEpsilonTree<Key, Value, B>::Node::a
     Node *res = this;
 
     while (!res->isLeaf) {
-        int pos = 0;
-        for (int i = 0; i < res->keys.size(); i++) {
-            pos = i == 0 ? 0 : i + 1;
-            if (key <= res->keys[i]) break;
+        int i=0;
+        for (; i < res->keys.size() && (key >= res->keys[i]); i++) {
         }
-        res = res->children[pos];
+        res = res->children[i];
     }
     return res;
 }
@@ -676,12 +670,16 @@ vector<Value> BEpsilonTree<Key, Value, B>::rangeQuery(Key minKey, Key maxKey) {
         //get appropriate leaf
         Node *current = root->approximateSearch(minKey);
         Value maxFound = minKey;
+        bool flag = true;
 
-        while (current != NULL && maxKey >= maxFound) {
+        while (current != NULL && maxKey >= maxFound && flag) {
             for (int i = 0; i < current->keys.size(); ++i) {
                 if (minKey <= current->keys[i] && current->keys[i] <= maxKey) {
                     res.push_back(current->values[i]);
                     maxFound = current->keys[i];
+                    if(maxFound == maxKey){
+                        flag = false;
+                    }
                 }
             }
             current = current->right_sibling;
