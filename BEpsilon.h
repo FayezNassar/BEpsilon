@@ -20,7 +20,7 @@ class NoSuchKeyException : public exception {
 
 class InvalidKeyRange : public exception {
     virtual const char *what() const throw() {
-        return "Invalid keys range.";
+        return "Invalid key range.";
     }
 };
 
