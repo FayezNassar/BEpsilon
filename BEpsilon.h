@@ -5,6 +5,8 @@
 #include <iomanip>
 #include <iostream>
 #include <vector>
+#include "swap_space.hpp"
+#include "backing_store.hpp"
 
 #include <assert.h>
 #include <algorithm>
@@ -27,7 +29,9 @@ class InvalidKeyRange : public exception {
 template<typename Key, typename Value, int B>
 class BEpsilonTree {
 public:
-    BEpsilonTree() : root(NULL),size_(0) {}
+    BEpsilonTree(swap_space *sspace) : ss(sspace),size_(0) {
+        root = ss->allocate(new node);
+    }
 
     void insert(Key key, Value value);
 
@@ -45,7 +49,7 @@ public:
 
 private:
 
-    typedef class Node {
+    typedef class Node : public serializable {
     public:
 
         typedef enum {
@@ -131,12 +135,51 @@ private:
 
         void updateParentKeys();
 
+        void _serialize(std::iostream &fs, serialization_context &context) {
+            fs << "isLeaf:" << std::endl;
+            serialize(fs, context, isLeaf);
+            fs << "parent:" << std::endl;
+            serialize(fs, context, parent);
+            fs << "right_sibling:" << std::endl;
+            serialize(fs, context, right_sibling);
+            fs << "left_sibling:" << std::endl;
+            serialize(fs, context, left_sibling);
+            fs << "sub_tree_min_key:" << std::endl;
+            serialize(fs, context, sub_tree_min_key);
+            fs << "keys:" << std::endl;
+            serialize(fs, context, keys);
+            fs << "values:" << std::endl;
+            serialize(fs, context, values);
+            fs << "children:" << std::endl;
+            serialize(fs, context, children);
+        }
+
+        void _deserialize(std::iostream &fs, serialization_context &context) {
+            std::string dummy;
+            fs >> dummy;
+            deserialize(fs, context, isLeaf);
+            fs >> dummy;
+            deserialize(fs, context, parent);
+            fs >> dummy;
+            deserialize(fs, context, right_sibling);
+            fs >> dummy;
+            deserialize(fs, context, left_sibling);
+            fs >> dummy;
+            deserialize(fs, context, sub_tree_min_key);
+            fs >> dummy;
+            deserialize(fs, context, keys);
+            fs >> dummy;
+            deserialize(fs, context, values);
+            fs >> dummy;
+            deserialize(fs, context, children);
+        }
+
     private:
         bool isLeaf;
-        Node *parent;
+        node_pointer parent;
         vector<Key> keys;
-        Node *right_sibling;
-        Node *left_sibling;
+        node_pointer right_sibling;
+        node_pointer left_sibling;
         Key sub_tree_min_key;
 
         //if this node is a leaf
@@ -145,12 +188,16 @@ private:
 
         //if the node is internal
         //children.size() == keys.size()+1;
-        vector<Node *> children;
+        vector<node_pointer> children;
         friend class BEpsilonTree;
+
 
     } Node;
 
-    Node *root;
+    // We let a swap_space handle all the I/O.
+    typedef typename swap_space::pointer<node> node_pointer;
+    swap_space *ss;
+    node_pointer root;
     int size_;
 };
 

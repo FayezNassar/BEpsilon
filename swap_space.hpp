@@ -143,6 +143,36 @@ template<class Key, class Value> void deserialize(std::iostream &fs,
   fs >> dummy;
 }
 
+template<class Key> void serialize(std::iostream &fs,
+                                                serialization_context &context,
+                                                std::vector<Key> &v)
+{
+    fs << "vector " << mp.size() << " {" << std::endl;
+    assert(fs.good());
+    for (auto it = v.begin(); it != v.end(); ++it) {
+        fs << "  ";
+        serialize(fs, context, (*it));
+        fs << std::endl;
+    }
+    fs << "}" << std::endl;
+}
+
+template<class Key> void deserialize(std::iostream &fs,
+                                                  serialization_context &context,
+                                                  std::vector<Key> &v)
+{
+    std::string dummy;
+    int size = 0;
+    fs >> dummy >> size >> dummy;
+    assert(fs.good());
+    for (int i = 0; i < size; i++) {
+        Key k;
+        deserialize(fs, context, k);
+        v.insert(k);
+    }
+    fs >> dummy;
+}
+
 template<class X> void serialize(std::iostream &fs, serialization_context &context, X *&x)
 {
   fs << "pointer ";
@@ -397,17 +427,16 @@ public:
     // Only callable through swap_space::allocate(...)
     pointer(swap_space *sspace, Referent *tgt)
     {
-      ss = sspace;
-      target = sspace->next_id++;
-
-      object *o = new object(sspace, tgt);
-      assert(o != NULL);
-      target = o->id;
-      assert(ss->objects.count(target) == 0);
-      ss->objects[target] = o;
-      ss->lru_pqueue.insert(o);
-      ss->current_in_memory_objects++;
-      ss->maybe_evict_something();
+        ss = sspace;
+        target = sspace->next_id++;
+        object *o = new object(sspace, tgt);
+        assert(o != NULL);
+        target = o->id;
+        assert(ss->objects.count(target) == 0);
+        ss->objects[target] = o;
+        ss->lru_pqueue.insert(o);
+        ss->current_in_memory_objects++;
+        ss->maybe_evict_something();
     }
 
   };
