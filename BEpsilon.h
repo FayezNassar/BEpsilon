@@ -13,6 +13,8 @@
 
 using namespace std;
 
+// We let a swap_space handle all the I/O.
+typedef typename swap_space::pointer<Node> NodePointer;
 
 class NoSuchKeyException : public exception {
     virtual const char *what() const throw() {
@@ -30,7 +32,7 @@ template<typename Key, typename Value, int B>
 class BEpsilonTree {
 public:
     BEpsilonTree(swap_space *sspace) : ss(sspace),size_(0) {
-        root = ss->allocate(new node);
+        root = NodePointer();
     }
 
     void insert(Key key, Value value);
@@ -48,6 +50,14 @@ public:
     int size();
 
 private:
+    /**
+Approximately search a key in subtree rooted with this node,
+if a given key is in the range of some leaf keys it will return that
+leaf else it will return the first or the last leaf.
+@param key to look up for.
+@return a leaf which the given key is in the range of this leaf keys.
+*/
+    NodePointer approximateSearch(Key key);
 
     typedef class Node : public serializable {
     public:
@@ -57,7 +67,7 @@ private:
             right
         } Direction;
 
-        Node(bool isLeaf, Node *parent = NULL, Node *right_sibling = NULL, Node *left_sibling = NULL);
+        Node(bool isLeaf, NodePointer parent = NodePointer(), NodePointer right_sibling = NodePointer(), NodePointer left_sibling = NodePointer());
 
         /**
         Check if node is is full, node is full when it has B children.
@@ -70,14 +80,6 @@ private:
         //is full(the number of key smaller than the minimum).
         bool isNotLegal();
 
-        /**
-        Approximately search a key in subtree rooted with this node,
-        if a given key is in the range of some leaf keys it will return that
-        leaf else it will return the first or the last leaf.
-        @param key to look up for.
-        @return a leaf which the given key is in the range of this leaf keys.
-        */
-        Node *approximateSearch(Key key);
 
         // A function that returns the index of the key in the parent that that point to this
         // the assumption is that parent != NULL and this node have some keys.
@@ -92,7 +94,7 @@ private:
         // A utility function to split the child of this node. ix is index
         // of child in child vector. The Child must be full when this
         // function is called
-        void splitChild(int ix, Node *child);
+        void splitChild(int ix, NodePointer child);
 
         //A utility function to make sure that all the leaf is on the same height.
         //should call after the key-value insertion from the leaf.
@@ -104,13 +106,13 @@ private:
 
         //A utility function to make sure that all the leaf is on the same height.
         //should call after the key-value remove from the leaf.
-        void balance(Node *child);
+        void balance(NodePointer child);
 
         // A utility function to insert a new key in the subtree rooted with
         // this node.
         bool insert(Key key, Value value);
 
-        static inline void updateMinSubTreeKey(Node* node);
+        static inline void updateMinSubTreeKey(NodePointer node);
 
         // A utility function to remove a key in the subtree rooted with
         // this node.
@@ -176,10 +178,10 @@ private:
 
     private:
         bool isLeaf;
-        node_pointer parent;
+        NodePointer parent;
         vector<Key> keys;
-        node_pointer right_sibling;
-        node_pointer left_sibling;
+        NodePointer right_sibling;
+        NodePointer left_sibling;
         Key sub_tree_min_key;
 
         //if this node is a leaf
@@ -188,21 +190,19 @@ private:
 
         //if the node is internal
         //children.size() == keys.size()+1;
-        vector<node_pointer> children;
+        vector<NodePointer> children;
         friend class BEpsilonTree;
 
 
     } Node;
 
-    // We let a swap_space handle all the I/O.
-    typedef typename swap_space::pointer<node> node_pointer;
     swap_space *ss;
-    node_pointer root;
+    NodePointer root;
     int size_;
 };
 
 template<typename Key, typename Value, int B>
-BEpsilonTree<Key, Value, B>::Node::Node(bool isLeaf, Node *parent, Node *right_sibling, Node *left_sibling) {
+BEpsilonTree<Key, Value, B>::Node::Node(bool isLeaf, NodePointer parent, NodePointer right_sibling, NodePointer left_sibling) {
     this->parent = parent;
     this->right_sibling = right_sibling;
     this->left_sibling = left_sibling;
@@ -234,7 +234,7 @@ template<typename Key, typename Value, int B>
 int BEpsilonTree<Key, Value, B>::Node::getOrder() {
     int ix = 0;
     //for sure this node isn't root and full, we check it before this function call.
-    typedef typename vector<BEpsilonTree<Key, Value, B>::Node *>::iterator iterator;
+    typedef typename vector<NodePointer>::iterator iterator;
     for (iterator it = this->parent->children.begin(); it != this->parent->children.end(); it++) {
         if ((*it) == this) {
             return ix;
@@ -245,14 +245,14 @@ int BEpsilonTree<Key, Value, B>::Node::getOrder() {
 };
 
 template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::splitChild(int ix, BEpsilonTree<Key, Value, B>::Node *left_child) {
+void BEpsilonTree<Key, Value, B>::Node::splitChild(int ix, NodePointer left_child) {
 
     //this node is the parent of right and left child.
     // Create a new node which is going to store (child->keys.size()-1) keys of child
-    BEpsilonTree<Key, Value, B>::Node *right_child = new BEpsilonTree<Key, Value, B>::Node(left_child->isLeaf,
+    NodePointer right_child = ss->allocate( new BEpsilonTree<Key, Value, B>::Node(left_child->isLeaf,
                                                                                            left_child->parent,
                                                                                            left_child->right_sibling,
-                                                                                           left_child->left_sibling);
+                                                                                           left_child->left_sibling));
 
     //update the sibling of both child and new node, add the new node between the child and the new node.
     //if the nods is internal and not a leaf, the sibling will be NULL.
@@ -309,7 +309,7 @@ void BEpsilonTree<Key, Value, B>::Node::splitChild(int ix, BEpsilonTree<Key, Val
                                      left_child->children.end());
 
         // w/o this, compilation error, with nested template in dependent scope.
-        typedef typename vector<BEpsilonTree<Key, Value, B>::Node *>::iterator iterator;
+        typedef typename vector<NodePointer>::iterator iterator;
         for (iterator it = left_child->children.begin() + middle_ix + 1; it != left_child->children.end(); it++) {
             (*it)->parent = right_child;
         }
@@ -330,7 +330,7 @@ template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::Node::insertKeysUpdate() {
     if (this->isFull()) {
         if (this->parent == NULL) {//this is root :)
-            Node *node = new Node(false);
+            NodePointer node = ss->allocate(new Node(false));
             //move it the the end;
             this->parent = node;
             node->children.insert(node->children.begin(), this);
@@ -350,7 +350,7 @@ bool BEpsilonTree<Key, Value, B>::Node::isSiblingBorrowable(Direction direction)
         return false;
     }
 
-    Node *sibling = direction == right ? right_sibling : left_sibling;
+    NodePointer sibling = direction == right ? right_sibling : left_sibling;
     return sibling != NULL && sibling->parent == this->parent && sibling->keys.size() > B / 2;
 };
 
@@ -507,7 +507,7 @@ void BEpsilonTree<Key, Value, B>::Node::updateParentKeys() {
 
 
 template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::balance(Node *child) {
+void BEpsilonTree<Key, Value, B>::Node::balance(NodePointer child) {
     if (child && child->keys.size() == 0) {
         child->updateParentKeys();
         if (child->left_sibling) {
@@ -541,7 +541,7 @@ void BEpsilonTree<Key, Value, B>::Node::balance(Node *child) {
 };
 
 template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::updateMinSubTreeKey(Node* node){
+void BEpsilonTree<Key, Value, B>::Node::updateMinSubTreeKey(NodePointer node){
     if(node->keys.size() == 0) return;
     if(node->isLeaf){
         node->sub_tree_min_key = node->keys[0];
@@ -584,8 +584,8 @@ bool BEpsilonTree<Key, Value, B>::Node::insert(Key key, Value value) {
 };
 
 template<typename Key, typename Value, int B>
-typename BEpsilonTree<Key, Value, B>::Node *BEpsilonTree<Key, Value, B>::Node::approximateSearch(Key key) {
-    Node *res = this;
+NodePointer BEpsilonTree<Key, Value, B>::approximateSearch(Key key) {
+    NodePointer res = root;
 
     while (!res->isLeaf) {
         int i=0;
@@ -646,7 +646,7 @@ Key BEpsilonTree<Key, Value, B>::Node::minSubTreeKeyTest() {
     if(!isLeaf) {
         Key minChildrenKey = this->children[0]->minSubTreeKeyTest();
 
-        for(Node* child: children){
+        for(NodePointer child: children){
             Key min_key = child->minSubTreeKeyTest();
             if(min_key <= minChildrenKey){
                 minChildrenKey = min_key;
@@ -668,7 +668,7 @@ void BEpsilonTree<Key, Value, B>::Node::bPlusValidation() {
         assert(this->keys.size() == this->values.size());
     } else {
         assert(this->keys.size()+1 == this->children.size());
-        for(Node* node : this->children) {
+        for(NodePointer node : this->children) {
             node->bPlusValidation();
         }
     }
@@ -691,7 +691,7 @@ void BEpsilonTree<Key, Value, B>::Node::RI() {
 template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::insert(Key key, Value value) {
     if (root == NULL) { // if the Tree is empty
-        root = new Node(true);
+        root = ss->allocate(new Node(true));
         root->keys.insert(root->keys.begin(), key);
         root->values.insert(root->values.begin(), value);
         root->sub_tree_min_key = key;
@@ -715,7 +715,7 @@ vector<Value> BEpsilonTree<Key, Value, B>::rangeQuery(Key minKey, Key maxKey) {
     vector<Value> res;
     if (root != NULL) {
         //get appropriate leaf
-        Node *current = root->approximateSearch(minKey);
+        NodePointer current = approximateSearch(minKey);
         Value maxFound = minKey;
         bool flag = true;
 
