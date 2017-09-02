@@ -13,8 +13,6 @@
 
 using namespace std;
 
-// We let a swap_space handle all the I/O.
-typedef typename swap_space::pointer<Node> NodePointer;
 
 class NoSuchKeyException : public exception {
     virtual const char *what() const throw() {
@@ -31,6 +29,13 @@ class InvalidKeyRange : public exception {
 template<typename Key, typename Value, int B>
 class BEpsilonTree {
 public:
+
+    class Node;
+
+    // We let a swap_space handle all the I/O.
+    typedef typename swap_space::pointer<Node> NodePointer;
+
+
     BEpsilonTree(swap_space *sspace) : ss(sspace),size_(0) {
         root = NodePointer();
     }
@@ -49,7 +54,7 @@ public:
 
     int size();
 
-private:
+
     /**
 Approximately search a key in subtree rooted with this node,
 if a given key is in the range of some leaf keys it will return that
@@ -57,9 +62,19 @@ leaf else it will return the first or the last leaf.
 @param key to look up for.
 @return a leaf which the given key is in the range of this leaf keys.
 */
-    NodePointer approximateSearch(Key key);
+    NodePointer approximateSearch(Key key){
+        NodePointer res = root;
 
-    typedef class Node : public serializable {
+        while (!res->isLeaf) {
+            int i=0;
+            for (; i < res->keys.size() && (key >= res->keys[i]); i++) {
+            }
+            res = res->children[i];
+        }
+        return res;
+    }
+
+    class Node : public serializable {
     public:
 
         typedef enum {
@@ -176,6 +191,7 @@ leaf else it will return the first or the last leaf.
             deserialize(fs, context, children);
         }
 
+
     private:
         bool isLeaf;
         NodePointer parent;
@@ -194,7 +210,8 @@ leaf else it will return the first or the last leaf.
         friend class BEpsilonTree;
 
 
-    } Node;
+    };
+
 
     swap_space *ss;
     NodePointer root;
@@ -584,19 +601,6 @@ bool BEpsilonTree<Key, Value, B>::Node::insert(Key key, Value value) {
 };
 
 template<typename Key, typename Value, int B>
-NodePointer BEpsilonTree<Key, Value, B>::approximateSearch(Key key) {
-    NodePointer res = root;
-
-    while (!res->isLeaf) {
-        int i=0;
-        for (; i < res->keys.size() && (key >= res->keys[i]); i++) {
-        }
-        res = res->children[i];
-    }
-    return res;
-}
-
-template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
     //the position of the key in the node.
     int ix = this->keys.size() - 1;
@@ -783,4 +787,5 @@ int BEpsilonTree<Key, Value, B>::size() {
 };
 
 #endif //BEPSILON_BEPSILON_H
+
 
