@@ -78,5 +78,7 @@ fabric.properties
 *.out
 *.app
 
+
 /cmake-build-debug/
 
+/CMakeLists.txt
