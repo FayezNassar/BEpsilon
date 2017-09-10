@@ -8,6 +8,8 @@
 #include "BEpsilon.h"
 #include "swap_space.hpp"
 #include "backing_store.hpp"
+#include <thread>         // std::this_thread::sleep_for
+#include <chrono>         // std::chrono::seconds
 #define DEFAULT_TEST_CACHE_SIZE (1)
 
 void printVector(vector<int> vector) {
@@ -56,10 +58,15 @@ int main() {
     uint64_t cache_size = DEFAULT_TEST_CACHE_SIZE;
     one_file_per_object_backing_store ofpobs("dd");
     swap_space sspace(&ofpobs, cache_size);
-    swap_space::pointer<Boy> p = sspace.allocate(new Boy());
-    swap_space::pointer<Boy> p2 = sspace.allocate(new Boy());
-    swap_space::pointer<Boy> p3 = sspace.allocate(new Boy());
-    p->print();
+    BEpsilonTree<string,string,3> tree(&sspace);
+    tree.insert("1","2");
+//    swap_space::pointer<Boy> p = sspace.allocate(new Boy());
+//    swap_space::pointer<Boy> p2 = sspace.allocate(new Boy());
+//    swap_space::pointer<Boy> p3 = sspace.allocate(new Boy());
+//    swap_space::pointer<Boy> p4;
+//    std::this_thread::sleep_for (std::chrono::seconds(30));
+//    cout << p4.isNull();
+//    p->print();
 //    BEpsilonTree<string,string,3> tree(&sspace);
 //    tree.insert("hello","1");
 

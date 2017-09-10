@@ -406,6 +406,11 @@ public:
         }
 
         void _serialize(std::iostream &fs, serialization_context &context) {
+            if(isNull()){
+                fs << "NULL" << std::endl;
+                return;
+            }
+            fs << "Pointer" << std::endl;
             assert(target > 0);
             assert(context.ss.objects.count(target) > 0);
             fs << target << " ";
@@ -415,6 +420,11 @@ public:
         }
 
         void _deserialize(std::iostream &fs, serialization_context &context) {
+            std::string dummy;
+            fs >> dummy;
+            if(dummy == "NULL"){
+                return;
+            }
             assert(target == 0);
             ss = &context.ss;
             fs >> target;
