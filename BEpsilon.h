@@ -40,7 +40,7 @@ public:
     typedef typename swap_space::pointer<Node> NodePointer;
 
 
-    BEpsilonTree(swap_space *sspace) : ss(sspace),size_(0) {
+    BEpsilonTree(swap_space *sspace) : ss(sspace),size_(0){
         root = NodePointer();
     }
 
@@ -97,7 +97,7 @@ leaf else it will return the first or the last leaf.
 
         void _serialize(std::iostream &fs, serialization_context &context) {
             fs << "isLeaf:" << std::endl;
-            fs << isLeaf;
+            fs << isLeaf << std::endl;
             fs << "parent:" << std::endl;
             serialize(fs, context, parent);
             fs << "right_sibling:" << std::endl;
@@ -105,7 +105,7 @@ leaf else it will return the first or the last leaf.
             fs << "left_sibling:" << std::endl;
             serialize(fs, context, left_sibling);
             fs << "sub_tree_min_key:" << std::endl;
-            fs << sub_tree_min_key;
+            fs << sub_tree_min_key << std::endl;
             fs << "keys:" << std::endl;
             serialize(fs, context, keys);
             fs << "values:" << std::endl;
@@ -157,6 +157,7 @@ leaf else it will return the first or the last leaf.
     swap_space *ss;
     NodePointer root;
     int size_;
+    Key default_key_;
 
 private:
     /**

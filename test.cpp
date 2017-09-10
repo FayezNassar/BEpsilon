@@ -58,8 +58,13 @@ int main() {
     uint64_t cache_size = DEFAULT_TEST_CACHE_SIZE;
     one_file_per_object_backing_store ofpobs("dd");
     swap_space sspace(&ofpobs, cache_size);
-    BEpsilonTree<string,string,3> tree(&sspace);
-    tree.insert("1","2");
+    BEpsilonTree<int64_t,int64_t,3> tree(&sspace);
+    tree.insert(1,1);
+    tree.insert(1,1);
+    tree.insert(1,1);
+    int t = tree.pointQuery(1);
+    cout << t << endl;
+    cout << tree.pointQuery(1) << endl;
 //    swap_space::pointer<Boy> p = sspace.allocate(new Boy());
 //    swap_space::pointer<Boy> p2 = sspace.allocate(new Boy());
 //    swap_space::pointer<Boy> p3 = sspace.allocate(new Boy());
