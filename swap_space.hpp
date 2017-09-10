@@ -169,7 +169,7 @@ template<class Key> void deserialize(std::iostream &fs,
     for (int i = 0; i < size; i++) {
         Key k;
         deserialize(fs, context, k);
-        v.insert(v.begin(),k);
+        v.push_back(k);
     }
     fs >> dummy;
 }
@@ -410,10 +410,10 @@ public:
                 fs << "NULL" << std::endl;
                 return;
             }
-            fs << "Pointer" << std::endl;
+            fs << "NodePointer ";
             assert(target > 0);
             assert(context.ss.objects.count(target) > 0);
-            fs << target << " ";
+            fs << target << std::endl;
             target = 0;
             assert(fs.good());
             context.is_leaf = false;

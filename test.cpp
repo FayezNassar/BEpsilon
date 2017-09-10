@@ -60,11 +60,11 @@ int main() {
     swap_space sspace(&ofpobs, cache_size);
     BEpsilonTree<int64_t,int64_t,3> tree(&sspace);
     tree.insert(1,1);
-    tree.insert(1,1);
-    tree.insert(1,1);
+    tree.insert(2,2);
+    tree.insert(3,3);
     int t = tree.pointQuery(1);
     cout << t << endl;
-    cout << tree.pointQuery(1) << endl;
+//    cout << tree.pointQuery(2) << endl;
 //    swap_space::pointer<Boy> p = sspace.allocate(new Boy());
 //    swap_space::pointer<Boy> p2 = sspace.allocate(new Boy());
 //    swap_space::pointer<Boy> p3 = sspace.allocate(new Boy());
@@ -99,18 +99,21 @@ int main() {
 //    cout << "done." << endl;
 //}
 //
-//void insertTest() {
-//    cout << "entered insertTest..." << endl;
-//    BEpsilonTree<int, int, 3> bplusTree;
-//
-//    for (int i = 0; i < 300; i++) {
-//        bplusTree.insert(i, i);
-//    }
-//    for (int i = 0; i < 300; i++) {
-//        assert(bplusTree.contains(i));
-//    }
-//    cout << "done." << endl;
-//}
+void insertTest() {
+    cout << "entered insertTest..." << endl;
+    uint64_t cache_size = DEFAULT_TEST_CACHE_SIZE;
+    one_file_per_object_backing_store ofpobs("dd");
+    swap_space sspace(&ofpobs, cache_size);
+    BEpsilonTree<int64_t,int64_t,3> tree(&sspace);
+
+    for (int i = 0; i < 300; i++) {
+        tree.insert(i, i);
+    }
+    for (int i = 0; i < 300; i++) {
+        assert(tree.contains(i));
+    }
+    cout << "done." << endl;
+}
 //
 //void removeLeftToRightTest() {
 //    cout << "entered removeLeftToRightTest..." << endl;
