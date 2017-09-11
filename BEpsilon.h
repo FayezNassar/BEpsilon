@@ -35,32 +35,19 @@ public:
     } Direction;
 
     class Node;
-
     // We let a swap_space handle all the I/O.
     typedef typename swap_space::pointer<Node> NodePointer;
-
-
     BEpsilonTree(swap_space *sspace) : ss(sspace),size_(0){
         root = NodePointer();
     }
 
     void insert(Key key, Value value);
-
     Value pointQuery(Key key);
-
     vector<Value> rangeQuery(Key minKey, Key maxKey);
-
     void remove(Key key);
-
     void printTree();
-
     bool contains(Key key);
-
     int size();
-
-
-
-
     /**
 Approximately search a key in subtree rooted with this node,
 if a given key is in the range of some leaf keys it will return that
@@ -364,14 +351,14 @@ void BEpsilonTree<Key, Value, B>::mergeKeysUpdate(NodePointer p,int child_ix) {
         p->keys.erase(p->keys.begin() + (child_ix - 1), p->keys.begin() + (child_ix - 1));
         p->children.erase(p->children.begin() + child_ix, p->children.begin() + child_ix);
     } else if (!p->parent.isNull()) {
-        int parent_ix = p->getOrder();
+        int parent_ix = getOrder(p);
         p->parent->keys[parent_ix > 0 ? parent_ix - 1 : 0] = p->keys[0];
     }
 };
 
 template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::tryBorrowFromLeft(NodePointer p) {
-    if (p->isSiblingBorrowable(left)) {
+    if (isSiblingBorrowable(p,left)) {
 
         if (p->isLeaf) {
             p->values.insert(p->values.begin(),
@@ -384,14 +371,14 @@ bool BEpsilonTree<Key, Value, B>::tryBorrowFromLeft(NodePointer p) {
             p->children.insert(p->children.begin(),
                                   p->left_sibling->children.end() - 1,
                                   p->left_sibling->children.end());
-            p->left_sibling->children[p->left_sibling->children.size() - 1]->parent = this;
+            p->left_sibling->children[p->left_sibling->children.size() - 1]->parent = p;
             p->left_sibling->children.pop_back();
         }
 
         p->left_sibling->keys.pop_back();
         p->updateMinSubTreeKey(p);
-        p->left_sibling->updateParentKeys();
-        p->updateParentKeys();
+        updateParentKeys(p->left_sibling);
+        updateParentKeys(p);
         return true;
     }
 
@@ -400,7 +387,7 @@ bool BEpsilonTree<Key, Value, B>::tryBorrowFromLeft(NodePointer p) {
 
 template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::tryBorrowFromRight(NodePointer p) {
-    if (p->isSiblingBorrowable(right)) {
+    if (isSiblingBorrowable(p,right)) {
 
         if (p->isLeaf) {
             p->values.insert(p->values.end(),p->right_sibling->values[0]);
@@ -417,8 +404,8 @@ bool BEpsilonTree<Key, Value, B>::tryBorrowFromRight(NodePointer p) {
         p->right_sibling->keys.erase(p->right_sibling->keys.begin());
         p->updateMinSubTreeKey(p);
         p->updateMinSubTreeKey(p->right_sibling);
-        p->right_sibling->updateParentKeys();
-        p->updateParentKeys();
+        updateParentKeys(p->right_sibling);
+        updateParentKeys(p);
         return true;
     }
 
@@ -494,7 +481,7 @@ void BEpsilonTree<Key, Value, B>::updateParentKeys(NodePointer p) {
     //we shouldn't move keys from node to other,
     // but we yes should update the parent key to have the minimum key in this node in the case of minimum key remove
     if (!p->parent.isNull() && p->parent->keys.size() > 0) {
-        int my_index = p->getOrder();
+        int my_index = getOrder(p);
         int update_idx = (my_index > 0) ? my_index - 1 : 0;
 
         if (p->keys.size() == 0) {
@@ -513,28 +500,28 @@ void BEpsilonTree<Key, Value, B>::updateParentKeys(NodePointer p) {
 template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::balance(NodePointer p,NodePointer child) {
     if (!child.isNull() && child->keys.size() == 0) {
-        child->updateParentKeys();
-        if (child->left_sibling) {
+        updateParentKeys(child);
+        if (!child->left_sibling.isNull()) {
             child->left_sibling->right_sibling = child->right_sibling;
         }
-        if (child->right_sibling) {
+        if (!child->right_sibling.isNull()) {
             child->right_sibling->left_sibling = child->left_sibling;
         }
         child = NodePointer();
     }
 
     if (isNotLegal(p)) {
-        if (!p->tryBorrowFromLeft()) {
-            if (!p->tryBorrowFromRight()) {
-                if (!p->tryMergeWithLeft()) {
-                    p->tryMergeWithRight();
+        if (!tryBorrowFromLeft(p)) {
+            if (!tryBorrowFromRight(p)) {
+                if (!tryMergeWithLeft(p)) {
+                    tryMergeWithRight(p);
                 }
             }
         }
     } else {
         p->updateMinSubTreeKey(p);
-        if(p->parent) {
-            p->updateParentKeys();
+        if(!p->parent.isNull()) {
+            updateParentKeys(p);
         }
     }
 
@@ -600,7 +587,7 @@ bool BEpsilonTree<Key, Value, B>::remove(NodePointer p,Key key) {
         if (p->keys[ix] == key) {
             p->keys.erase(p->keys.begin() + ix);
             p->values.erase(p->values.begin() + ix);
-            balance(p,NULL);
+            balance(p,NodePointer());
             return true;
         }
         return false;
@@ -608,7 +595,7 @@ bool BEpsilonTree<Key, Value, B>::remove(NodePointer p,Key key) {
         if (p->keys[ix] <= key) {
             ix++;
         }
-        return p->children[ix]->remove(key);
+        return remove(p->children[ix],key);
     }
 };
 
@@ -648,7 +635,6 @@ Key BEpsilonTree<Key, Value, B>::Node::minSubTreeKeyTest() {
     }
     return min;
 }
-
 template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::Node::bPlusValidation() {
     //root can have less than B/2 keys.

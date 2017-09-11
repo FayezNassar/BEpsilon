@@ -10,7 +10,7 @@
 #include "backing_store.hpp"
 #include <thread>         // std::this_thread::sleep_for
 #include <chrono>         // std::chrono::seconds
-#define DEFAULT_TEST_CACHE_SIZE (1)
+#define DEFAULT_TEST_CACHE_SIZE (4)
 
 void printVector(vector<int> vector) {
     for (int i = 0; i < vector.size(); i++) {
@@ -49,21 +49,26 @@ public:
 };
 
 int main() {
-//    insertTest();
-//    removeLeftToRightTest();
-//    removeRightToLeftTest();
+    insertTest();
+    removeLeftToRightTest();
+    removeRightToLeftTest();
 //    removeLeftToRightMassiveTest();
 //    removeRightToLeftMassiveTest();
 //    removeRandomMassiveTest();
-    uint64_t cache_size = DEFAULT_TEST_CACHE_SIZE;
-    one_file_per_object_backing_store ofpobs("dd");
-    swap_space sspace(&ofpobs, cache_size);
-    BEpsilonTree<int64_t,int64_t,3> tree(&sspace);
-    tree.insert(1,1);
-    tree.insert(2,2);
-    tree.insert(3,3);
-    int t = tree.pointQuery(1);
-    cout << t << endl;
+//    uint64_t cache_size = DEFAULT_TEST_CACHE_SIZE;
+//    one_file_per_object_backing_store ofpobs("dd");
+//    swap_space sspace(&ofpobs, cache_size);
+//    BEpsilonTree<int64_t,int64_t,3> tree(&sspace);
+//    tree.insert(1,1);
+//    tree.insert(2,2);
+//    tree.insert(3,3);
+//    tree.insert(4,4);
+//    for(int i=5;i<10;i++){
+//        tree.insert(i,i);
+//    }
+//    cout << tree.pointQuery(1) << endl;
+//    cout << tree.pointQuery(2) << endl;
+//    cout << tree.pointQuery(8) << endl;
 //    cout << tree.pointQuery(2) << endl;
 //    swap_space::pointer<Boy> p = sspace.allocate(new Boy());
 //    swap_space::pointer<Boy> p2 = sspace.allocate(new Boy());
@@ -114,40 +119,46 @@ void insertTest() {
     }
     cout << "done." << endl;
 }
-//
-//void removeLeftToRightTest() {
-//    cout << "entered removeLeftToRightTest..." << endl;
-//    BEpsilonTree<int, int, 3> bplusTree;
-//
-//    for (int i = 0; i < 800; i++) {
-//        bplusTree.insert(i, i);
-//    }
-//
-//    int i = 0;
-//    while (bplusTree.size() > 0) {
-//        bplusTree.remove(i);
-//        assert(!bplusTree.contains(i));
-//        i++;
-//    }
-//    cout << "done." << endl;
-//}
-//
-//void removeRightToLeftTest() {
-//    cout << "entered removeRightToLeftTest..." << endl;
-//    BEpsilonTree<int, int, 3> bplusTree;
-//
-//    for (int i = 0; i < 800; i++) {
-//        bplusTree.insert(i, i);
-//    }
-//
-//    int i = 800;
-//    while (bplusTree.size() > 0) {
-//        bplusTree.remove(i);
-//        assert(!bplusTree.contains(i));
-//        i--;
-//    }
-//    cout << "done." << endl;
-//}
+
+void removeLeftToRightTest() {
+    cout << "entered removeLeftToRightTest..." << endl;
+    uint64_t cache_size = DEFAULT_TEST_CACHE_SIZE;
+    one_file_per_object_backing_store ofpobs("dd");
+    swap_space sspace(&ofpobs, cache_size);
+    BEpsilonTree<int64_t,int64_t,3> tree(&sspace);
+
+    for (int i = 0; i < 800; i++) {
+        tree.insert(i, i);
+    }
+
+    int i = 0;
+    while (tree.size() > 0) {
+        tree.remove(i);
+        assert(!tree.contains(i));
+        i++;
+    }
+    cout << "done." << endl;
+}
+
+void removeRightToLeftTest() {
+    cout << "entered removeRightToLeftTest..." << endl;
+    uint64_t cache_size = DEFAULT_TEST_CACHE_SIZE;
+    one_file_per_object_backing_store ofpobs("dd");
+    swap_space sspace(&ofpobs, cache_size);
+    BEpsilonTree<int64_t,int64_t,3> tree(&sspace);
+
+    for (int i = 0; i < 800; i++) {
+        tree.insert(i, i);
+    }
+
+    int i = 800;
+    while (tree.size() > 0) {
+        tree.remove(i);
+        assert(!tree.contains(i));
+        i--;
+    }
+    cout << "done." << endl;
+}
 //
 //void removeLeftToRightMassiveTest() {
 //    cout << "entered removeLeftToRightMassiveTest..." << endl;
