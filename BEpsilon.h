@@ -320,7 +320,7 @@ void BEpsilonTree<Key, Value, B>::Node::splitChild(int ix, BEpsilonTree<Key, Val
     }
 
     MessageIterator first_message_it = left_child->message_buff.begin();
-    while(first_message_it->key <= right_child_min_key) {
+    while(first_message_it != left_child->message_buff.end() && first_message_it->key <= right_child_min_key) {
         first_message_it++;
     }
     right_child->message_buff.insert(right_child->message_buff.begin(),
@@ -609,9 +609,7 @@ bool BEpsilonTree<Key, Value, B>::Node::insertMessage(Opcode opcode, Key key, Va
     Message message(opcode, key, value);
     //ix will contains the appropriate index in the message.key in the message buffer.
     int ix = 0;
-    while(ix < this->message_buff.size() && this->message_buff[ix].key < key) {
-        ix++;
-    }
+    for(;ix < this->message_buff.size() && this->message_buff[ix].key < key;ix++) {}
     //ask after the insert if there a need to split the message buffer.
     this->message_buff.insert(this->message_buff.begin() + ix, message);
     this->bufferFlushIfFull();
@@ -623,7 +621,6 @@ bool BEpsilonTree<Key, Value, B>::Node::insertMessage(Opcode opcode, Key key, Va
 
 template <typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::Node::isMessagesBufferFull() {
-    //TODO: check the actual size of the message, calling the size method of message class.
     return this->message_buff.size() >=  MAX_NUMBER_OF_MESSAGE_PER_NODE;
 };
 
@@ -665,25 +662,27 @@ void BEpsilonTree<Key, Value, B>::Node::bufferFlushIfFull() {
         this->insertKeysUpdate();
         this->balance(NULL);
     } else {
-        MessageIterator e_it = this->message_buff.begin();
+        MessageIterator r_it = this->message_buff.begin();
+        MessageIterator l_it = this->message_buff.begin();
         int key_ix = 0;
-        vector<Message> to_flush;
-        while(key_ix < this->keys.size() && to_flush.empty()) {
-            while(e_it->key <= this->keys[key_ix]) {
-                to_flush.push_back(*e_it);
-                e_it++;
+        bool intersection = false;
+        while(key_ix < this->keys.size() && !intersection) {
+            while(r_it->key <= this->keys[key_ix]) {
+                r_it++;
+                intersection = true;
             }
             key_ix++;
         }
-        int child_ix = to_flush.empty() ? this->children.size()-1 : key_ix;
-        if(to_flush.empty()) {
-            e_it = this->message_buff.end();
+        int child_ix = !intersection ? this->children.size()-1 : key_ix;
+        if(!intersection) {
+            r_it = this->message_buff.end();
         }
-        this->message_buff.erase(this->message_buff.begin(), e_it);
-        this->children[child_ix]->message_buff.insert(this->children[child_ix]->message_buff.end(),
-                                                     to_flush.begin(),
-                                                     to_flush.end()
-        );
+        MessageIterator first_child_it =  this->children[child_ix]->message_buff.begin();
+        MessageIterator last_child_it  =  this->children[child_ix]->message_buff.end();
+        this->children[child_ix]->message_buff.insert(last_child_it, l_it, r_it);
+        std::sort(first_child_it, last_child_it);
+        std::reverse(first_child_it, last_child_it);
+        this->message_buff.erase(l_it, r_it);
         this->children[child_ix]->bufferFlushIfFull();
     }
 }
