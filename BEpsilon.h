@@ -24,6 +24,11 @@ class InvalidKeyRange : public exception {
     }
 };
 
+template<typename T, class sizer>
+static inline int get_size(const T& t) {
+    return sizer::getSize(t);
+}
+
 template<typename Key, typename Value, int B>
 class BEpsilonTree {
 public:
@@ -44,13 +49,51 @@ public:
     int size();
 
 private:
+    typedef enum {
+        INSERT,
+        REMOVE,
+        UPDATE
+    } Opcode;
 
-    typedef class Node {
+    class MessageCompare {
+        MessageCompare(Key key) : key(key) {}
+        bool operator()(Message message) {
+            return message.key == this->key;
+        }
+
+    private:
+        Key key;
+    };
+
+    class Message {
     public:
+        Message(Opcode opcode, Key key, Value value) : opcode(opcode), key(key), value(value) {};
+        bool operator<(const Message& other) {//for std::sort method
+            return this->key > other.key;
+        }
+        //TODO add size function that calc the exact message size, when the Key/Value size isn't const.
+    private:
+        Opcode opcode;
+        Key key;
+        Value value;
+
+        friend class BEpsilonTree;
+    };
+
+    class Node {
+    public:
+        const int BLOCK_SIZE = 1000;
+        const double EPSILON = 0.1;
+        const int BUFFER_SIZE = BLOCK_SIZE * EPSILON;
+        const int MESSAGE_SIZE = sizeof(Message);
+        const int MAX_NUMBER_OF_MESSAGE_PER_NODE = BUFFER_SIZE/MESSAGE_SIZE;
+
+        typedef typename vector<BEpsilonTree<Key, Value, B>::Message>::iterator MessageIterator;
+        typedef typename vector<BEpsilonTree<Key, Value, B>::Node*>::iterator   ChildIterator;
 
         typedef enum {
-            left,
-            right
+            LEFT,
+            RIGHT
         } Direction;
 
         Node(bool isLeaf, Node *parent = NULL, Node *right_sibling = NULL, Node *left_sibling = NULL);
@@ -74,6 +117,8 @@ private:
         @return a leaf which the given key is in the range of this leaf keys.
         */
         Node *approximateSearch(Key key);
+
+        Value pointQuery(Key key);
 
         // A function that returns the index of the key in the parent that that point to this
         // the assumption is that parent != NULL and this node have some keys.
@@ -113,6 +158,12 @@ private:
         //the tree will not affected if the key isn't existing.
         bool remove(Key key);
 
+        bool insertMessage(Opcode opcode, Key key, Value value = Value());
+
+        bool isMessagesBufferFull();
+
+        void bufferFlushIfFull();
+
         void inOrder(int indent = 0);
 
         Key minSubTreeKeyTest();
@@ -146,9 +197,12 @@ private:
         //if the node is internal
         //children.size() == keys.size()+1;
         vector<Node *> children;
+
+        //balanced message_buff for O(log(# of messages in the buffer)) insertion/deletion/query.
+        vector<Message> message_buff;
         friend class BEpsilonTree;
 
-    } Node;
+    };
 
     Node *root;
     int size_;
@@ -165,7 +219,7 @@ BEpsilonTree<Key, Value, B>::Node::Node(bool isLeaf, Node *parent, Node *right_s
 template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::Node::isFull() {
     //choose the max number of key and values in each node according to the block size.
-    return this->keys.size() == B;
+    return this->keys.size() >= B;
 }
 
 template<typename Key, typename Value, int B>
@@ -219,9 +273,8 @@ void BEpsilonTree<Key, Value, B>::Node::splitChild(int ix, BEpsilonTree<Key, Val
 
     //update to move the minimum number of children for each node, and not 1.
     //B should be grater than 2, else infinite loop will occur.
-    int middle_ix = B / 2;
-
-
+    int middle_ix = B/2;
+    Key right_child_min_key;
     if (left_child->isLeaf) {
         right_child->keys.insert(right_child->keys.begin(),
                                  left_child->keys.begin() + middle_ix,
@@ -238,11 +291,14 @@ void BEpsilonTree<Key, Value, B>::Node::splitChild(int ix, BEpsilonTree<Key, Val
                                  left_child->values.end());
 
         this->keys.insert(this->keys.begin() + ix, right_child->keys[0]);
+
+        right_child_min_key = right_child->keys[0];
         right_child->sub_tree_min_key = right_child->keys[0];
     } else {
-
         //find the appropriate key and its index.
         int key = left_child->keys[middle_ix];
+        right_child_min_key = key;
+
         int key_ix = 0;
         while ((key_ix >= 0) && (key_ix < this->keys.size()) && (this->keys[key_ix] < key)) {
             key_ix++;
@@ -273,9 +329,17 @@ void BEpsilonTree<Key, Value, B>::Node::splitChild(int ix, BEpsilonTree<Key, Val
         right_child->sub_tree_min_key = right_child->children[0]->sub_tree_min_key;
     }
 
+    MessageIterator first_message_it = left_child->message_buff.begin();
+    while(first_message_it != left_child->message_buff.end() && first_message_it->key <= right_child_min_key) {
+        first_message_it++;
+    }
+    right_child->message_buff.insert(right_child->message_buff.begin(),
+                                     first_message_it,
+                                     left_child->message_buff.end());
+    left_child->message_buff.erase(first_message_it, left_child->message_buff.end());
+
     //set the new node as a child of this node
     this->children.insert(this->children.begin() + (ix + 1), right_child);
-
 };
 
 
@@ -284,7 +348,6 @@ void BEpsilonTree<Key, Value, B>::Node::insertKeysUpdate() {
     if (this->isFull()) {
         if (this->parent == NULL) {//this is root :)
             Node *node = new Node(false);
-            //move it the the end;
             this->parent = node;
             node->children.insert(node->children.begin(), this);
             node->splitChild(0, this);
@@ -303,7 +366,7 @@ bool BEpsilonTree<Key, Value, B>::Node::isSiblingBorrowable(Direction direction)
         return false;
     }
 
-    Node *sibling = direction == right ? right_sibling : left_sibling;
+    Node *sibling = direction == RIGHT ? right_sibling : left_sibling;
     return sibling != NULL && sibling->parent == this->parent && sibling->keys.size() > B / 2;
 };
 
@@ -320,8 +383,7 @@ void BEpsilonTree<Key, Value, B>::Node::mergeKeysUpdate(int child_ix) {
 
 template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromLeft() {
-    if (this->isSiblingBorrowable(left)) {
-
+    if (this->isSiblingBorrowable(LEFT)) {
         if (this->isLeaf) {
             this->values.insert(this->values.begin(),
                                 this->left_sibling->values.end() - 1,
@@ -329,7 +391,7 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromLeft() {
             this->left_sibling->values.pop_back();
             this->keys.insert(this->keys.begin(), left_sibling->keys[left_sibling->keys.size()-1]);
         } else {
-            this->keys.insert(this->keys.begin(), this->children[0]->sub_tree_min_key/*getMinSubTreeKey()*/);
+            this->keys.insert(this->keys.begin(), this->children[0]->sub_tree_min_key);
             this->children.insert(this->children.begin(),
                                   this->left_sibling->children.end() - 1,
                                   this->left_sibling->children.end());
@@ -337,20 +399,27 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromLeft() {
             this->left_sibling->children.pop_back();
         }
 
+        Key key = this->isLeaf ?
+                  left_sibling->keys[left_sibling->keys.size()-1] : this->children[0]->sub_tree_min_key;
+        MessageIterator l_it = this->left_sibling->message_buff.begin();
+        while(l_it->key < key) {
+            l_it++;
+        }
+        this->message_buff.insert(this->message_buff.begin() , l_it, this->left_sibling->message_buff.end());
+        this->left_sibling->message_buff.erase(l_it, this->left_sibling->message_buff.end());
         this->left_sibling->keys.pop_back();
         updateMinSubTreeKey(this);
         left_sibling->updateParentKeys();
         this->updateParentKeys();
+        this->bufferFlushIfFull();
         return true;
     }
-
     return false;
 }
 
 template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromRight() {
-    if (this->isSiblingBorrowable(right)) {
-
+    if (this->isSiblingBorrowable(RIGHT)) {
         if (this->isLeaf) {
             this->values.insert(this->values.end(),this->right_sibling->values[0]);
             right_sibling->values.erase(this->right_sibling->values.begin());
@@ -362,6 +431,15 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromRight() {
             this->right_sibling->children[0]->parent = this;
             this->right_sibling->children.erase(this->right_sibling->children.begin());
         }
+
+        Key key = this->isLeaf ?
+                  right_sibling->keys[0] : right_sibling->children[0]->sub_tree_min_key;
+        MessageIterator r_it = this->right_sibling->message_buff.begin();
+        while(r_it->key < key) {
+            r_it++;
+        }
+        this->message_buff.insert(this->message_buff.end() , this->right_sibling->message_buff.begin(), r_it);
+        this->right_sibling->message_buff.erase(this->right_sibling->message_buff.begin(), r_it);
 
         this->right_sibling->keys.erase(this->right_sibling->keys.begin());
         updateMinSubTreeKey(this);
@@ -381,10 +459,9 @@ bool BEpsilonTree<Key, Value, B>::Node::tryMergeWithLeft() {
     }
 
     if (isLeaf) {
-        left_sibling->values.insert(left_sibling->values.end(), this->values.begin(), this->values.end());
-        left_sibling->keys.insert(left_sibling->keys.end(),this->keys.begin(),this->keys.end());
-        values.erase(values.begin(), values.end());
-
+        this->left_sibling->values.insert(left_sibling->values.end(), this->values.begin(), this->values.end());
+        this->left_sibling->keys.insert(left_sibling->keys.end(), this->keys.begin(), this->keys.end());
+        this->values.erase(values.begin(), values.end());
     } else {
         bool first_time = true;
         while (children.size() > 0) {
@@ -401,8 +478,15 @@ bool BEpsilonTree<Key, Value, B>::Node::tryMergeWithLeft() {
             children.erase(children.begin());
         }
     }
-
+    this->left_sibling->message_buff.insert(this->left_sibling->message_buff.end(),
+                                            this->message_buff.begin(),
+                                            this->message_buff.end()
+    );
+    this->message_buff.erase(this->message_buff.begin(),
+                             this->message_buff.end()
+    );
     keys.erase(keys.begin(), keys.end());
+    this->left_sibling->bufferFlushIfFull();
     return true;
 }
 
@@ -432,9 +516,17 @@ bool BEpsilonTree<Key, Value, B>::Node::tryMergeWithRight() {
             children.pop_back();
         }
     }
-
+    this->right_sibling->message_buff.insert(this->right_sibling->message_buff.begin(),
+                                             this->message_buff.begin(),
+                                             this->message_buff.end());
+    this->message_buff.erase(this->message_buff.begin(),
+                             this->message_buff.end()
+    );
     keys.erase(keys.begin(), keys.end());
     updateMinSubTreeKey(right_sibling);
+    if(this->left_sibling != NULL) {
+        this->left_sibling->bufferFlushIfFull();
+    }
     return true;
 }
 
@@ -472,7 +564,6 @@ void BEpsilonTree<Key, Value, B>::Node::balance(Node *child) {
         delete child;
         child = NULL;
     }
-
     if (isNotLegal()) {
         if (!tryBorrowFromLeft()) {
             if (!tryBorrowFromRight()) {
@@ -483,13 +574,12 @@ void BEpsilonTree<Key, Value, B>::Node::balance(Node *child) {
         }
     } else {
         updateMinSubTreeKey(this);
-        if(parent) {
+        if(this->parent) {
             this->updateParentKeys();
         }
     }
-
-    if (parent) {
-        parent->balance(this);
+    if (this->parent) {
+        this->parent->balance(this);
     }
 };
 
@@ -505,41 +595,12 @@ void BEpsilonTree<Key, Value, B>::Node::updateMinSubTreeKey(Node* node){
 
 template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::Node::insert(Key key, Value value) {
-
-    //for finding the key position, we'll start with last index
-    int ix = this->keys.size() - 1;
-    //find the key index.
-    while (ix >= 0 && keys[ix] > key) {
-        ix--;
-    }
-
-    if (this->isLeaf) {
-        for(Key k: this->keys){
-            if(k == key){
-                return false;
-            }
-        }
-        this->keys.insert(this->keys.begin() + (ix + 1), key);
-        this->values.insert(this->values.begin() + (ix + 1), value);
-        this->sub_tree_min_key = this->keys[0];
-        this->insertKeysUpdate();
-        return true;
-    } else {//this is internal node
-        ix = ix == -1 ? 0 : ix;
-        if (this->keys[ix] < key) {
-            ix++;
-        }
-        if(key < this->sub_tree_min_key) {
-            this->sub_tree_min_key = key;
-        }
-        return this->children[ix]->insert(key, value);
-    }
+    return this->insertMessage(INSERT, key, value);
 };
 
 template<typename Key, typename Value, int B>
 typename BEpsilonTree<Key, Value, B>::Node *BEpsilonTree<Key, Value, B>::Node::approximateSearch(Key key) {
     Node *res = this;
-
     while (!res->isLeaf) {
         int i=0;
         for (; i < res->keys.size() && (key >= res->keys[i]); i++) {
@@ -550,30 +611,111 @@ typename BEpsilonTree<Key, Value, B>::Node *BEpsilonTree<Key, Value, B>::Node::a
 }
 
 template<typename Key, typename Value, int B>
+Value BEpsilonTree<Key, Value, B>::Node::pointQuery(Key key) {
+    MessageCompare messageCompare(key);
+    MessageIterator message_it = std::find(this->message_buff.begin(), this->message_buff.end(), messageCompare);
+    if(message_it != this->message_buff.end()) { // the key is appear in
+
+    }
+}
+
+template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
-    //the position of the key in the node.
-    int ix = this->keys.size() - 1;
-    while (ix >= 0 && this->keys[ix] > key) {
-        ix--;
-    }
-    if (ix == -1) {
-        ix = 0;
-    }
-    if (this->isLeaf) {
-        if (this->keys[ix] == key) {
-            this->keys.erase(this->keys.begin() + ix);
-            this->values.erase(this->values.begin() + ix);
-            this->balance(NULL);
-            return true;
-        }
-        return false;
-    } else {
-        if (this->keys[ix] <= key) {
-            ix++;
-        }
-        return this->children[ix]->remove(key);
-    }
+    return this->insertMessage(REMOVE, key);
 };
+
+template <typename Key, typename Value, int B>
+bool BEpsilonTree<Key, Value, B>::Node::insertMessage(Opcode opcode, Key key, Value value) {
+    Message message(opcode, key, value);
+    //ix will contains the appropriate index in the message.key in the message buffer.
+    int ix = 0;
+    for(;ix < this->message_buff.size() && this->message_buff[ix].key < key;ix++) {}
+
+    if(ix < this->message_buff.size() && this->message_buff[ix].key == key) {
+        if(message.opcode == INSERT && this->message_buff[ix].opcode == REMOVE) {
+            this->message_buff[ix] = message;
+        } else if (message.opcode == REMOVE && this->message_buff[ix].opcode == INSERT) {
+            this->message_buff.erase(this->message_buff.begin() + ix);
+        }
+    } else {
+        this->message_buff.insert(this->message_buff.begin() + ix, message);
+    }
+    //ask after the insert if there a need to split the message buffer.
+    this->bufferFlushIfFull();
+    return true;
+}
+
+template <typename Key, typename Value, int B>
+bool BEpsilonTree<Key, Value, B>::Node::isMessagesBufferFull() {
+    return this->message_buff.size() >=  MAX_NUMBER_OF_MESSAGE_PER_NODE;
+};
+
+/*
+ * when the buffer got empty, we need to flush the message into the key, value buffers,
+ * and then handle the node separate.*/
+template <typename  Key, typename Value, int B>
+void BEpsilonTree<Key, Value, B>::Node::bufferFlushIfFull() {
+    if(this->isMessagesBufferFull() == false) return;
+    vector<MessageIterator> tmp;
+    if(this->isLeaf) { //i.e. leaf node.. so apply the messages.
+        for(MessageIterator m = this->message_buff.begin(); m != this->message_buff.end(); m++) {
+            if(m->opcode == REMOVE) {
+                int ix; for(ix = 0; ix < this->keys.size() && this->keys[ix] < m->key; ix++) {}
+                if(ix < this->keys.size() && this->keys[ix] == m->key) {
+                    this->keys.erase(this->keys.begin() + ix);
+                    this->values.erase(this->values.begin() + ix);
+                }
+                tmp.push_back(m);
+            }
+        }
+        for(MessageIterator m : tmp) {
+            this->message_buff.erase(m);
+        }
+        int num_of_applied_message = 0;
+        for(Message m : this->message_buff) {
+            if(this->isFull()) break;
+            int ix; for(ix = 0; ix < this->keys.size() && this->keys[ix] < m.key; ix++) {}
+            if(m.opcode == INSERT) {
+                this->keys.insert(this->keys.begin() + ix, m.key);
+                this->values.insert(this->values.begin() + ix, m.value);
+                num_of_applied_message++;
+            } else {
+                assert("unexpected opcode!!!");
+            }
+        }
+        this->message_buff.erase(this->message_buff.begin(), this->message_buff.begin() + num_of_applied_message);
+        this->sub_tree_min_key = this->keys[0];
+        this->insertKeysUpdate();
+        this->balance(NULL);
+    } else {
+        MessageIterator message_it = this->message_buff.begin();
+        ChildIterator child_it = this->children.begin();
+        for(int key_ix = 0; key_ix < this->keys.size(); key_ix++) {
+            while((message_it != this->message_buff.end()) && (message_it->key < this->keys[key_ix])) {
+                (*child_it)->message_buff.push_back(*message_it);
+                message_it++;
+            }
+            std::sort((*child_it)->message_buff.begin(),
+                      (*child_it)->message_buff.end(),
+                      [](Message a, Message b) {return a.key < b.key;});
+            child_it++;
+        }
+        if(message_it != this->message_buff.end()) {
+            (*child_it)->message_buff.insert((*child_it)->message_buff.end(), message_it, this->message_buff.end());
+            std::sort((*child_it)->message_buff.begin(),
+                      (*child_it)->message_buff.end(),
+                      [](Message a, Message b) {return a.key < b.key;});
+        }
+        this->message_buff.erase(this->message_buff.begin(), this->message_buff.end());
+        Node* child = this->children.front();
+        Node* right_child = NULL;
+        while(child != NULL) {
+            right_child = child->right_sibling;
+            child->bufferFlushIfFull();
+            child = right_child;
+        }
+    }
+}
 
 template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::Node::inOrder(int indent) {
@@ -645,19 +787,14 @@ template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::insert(Key key, Value value) {
     if (root == NULL) { // if the Tree is empty
         root = new Node(true);
-        root->keys.insert(root->keys.begin(), key);
-        root->values.insert(root->values.begin(), value);
-        root->sub_tree_min_key = key;
-    } else { //if the root is not null.
-        if(root->insert(key, value)){
-            size_++;
-        }
-        if (root->parent != NULL) {
-            root = root->parent;
-        }
     }
-    //TODO remove when analysis
-//    root->RI();
+    bool insertion_success_ = root->insert(key, value);
+    if(insertion_success_) {
+        size_++;
+    }
+    if(root->parent != NULL) {
+        root = root->parent;
+    }
 };
 
 template<typename Key, typename Value, int B>
@@ -690,11 +827,15 @@ vector<Value> BEpsilonTree<Key, Value, B>::rangeQuery(Key minKey, Key maxKey) {
 
 template<typename Key, typename Value, int B>
 Value BEpsilonTree<Key, Value, B>::pointQuery(Key key) {
-    vector<Value> res = rangeQuery(key, key);
+    if(root != NULL) {
+        return root->rangeQuery(key);
+    }
+    throw NoSuchKeyException();
+    /*vector<Value> res = rangeQuery(key, key);
     if (!res.size()) {
         throw NoSuchKeyException();
     }
-    return res[0];
+    return res[0];*/
 };
 
 template<typename Key, typename Value, int B>
@@ -709,8 +850,9 @@ void BEpsilonTree<Key, Value, B>::remove(Key key) {
             root->parent = NULL;
         }
     }
-    //TODO remove when analysis
-//    root->RI();
+    if(root->parent != NULL) {
+        root = root->parent;
+    }
 };
 
 template<typename Key, typename Value, int B>
