@@ -41,8 +41,9 @@ public:
         RIGHT
     } Direction;
 
-    class Message {
+    class Message : public serializable {
     public:
+        Message(){}
         Message(Opcode opcode, Key key, Value value) : opcode(opcode), key(key), value(value) {};
 
         bool operator<(const Message &other) {//for std::sort method
@@ -51,6 +52,28 @@ public:
 
         bool operator==(const Message &other) {
             return this->key == other.key;
+        }
+
+
+        void _serialize(std::iostream &fs, serialization_context &context) {
+            fs << "opcode:" << std::endl;
+            fs << opcode << std::endl;
+            fs << "key:" << std::endl;
+            serialize(fs, context, key);
+            fs << "value:" << std::endl;
+            serialize(fs, context, value);
+        }
+
+        void _deserialize(std::iostream &fs, serialization_context &context) {
+            std::string dummy;
+            int op_int;
+            fs >> dummy;
+            fs >> op_int;
+            opcode = (Opcode) op_int;
+            fs >> dummy;
+            deserialize(fs, context, key);
+            fs >> dummy;
+            deserialize(fs, context, value);
         }
         //TODO add size function that calc the exact message size, when the Key/Value size isn't const.
     private:
@@ -124,6 +147,8 @@ public:
             serialize(fs, context, values);
             fs << "children:" << std::endl;
             serialize(fs, context, children);
+            fs << "messages:" << std::endl;
+            serialize(fs, context, message_buff);
         }
 
         void _deserialize(std::iostream &fs, serialization_context &context) {
@@ -144,6 +169,8 @@ public:
             deserialize(fs, context, values);
             fs >> dummy;
             deserialize(fs, context, children);
+            fs >> dummy;
+            deserialize(fs, context, message_buff);
         }
 
 
@@ -903,6 +930,8 @@ template<typename Key, typename Value, int B>
 int BEpsilonTree<Key, Value, B>::size() {
     return size_;
 };
+
+//private o
 
 #endif //BEPSILON_BEPSILON_H
 
