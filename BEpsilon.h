@@ -36,6 +36,11 @@ public:
         ANY
     } Opcode;
 
+    typedef enum {
+        LEFT,
+        RIGHT
+    } Direction;
+
     class Message {
     public:
         Message(Opcode opcode, Key key, Value value) : opcode(opcode), key(key), value(value) {};
@@ -61,13 +66,15 @@ public:
     // We let a swap_space handle all the I/O.
     typedef typename swap_space::pointer<Node> NodePointer;
 
+
+    typedef typename vector<BEpsilonTree<Key, Value, B>::Message>::iterator MessageIterator;
+    typedef typename vector<NodePointer>::iterator ChildIterator;
+
     BEpsilonTree(swap_space *sspace) : ss(sspace), size_(0) {
         root = NodePointer();
     }
 
     void insert(Key key, Value value);
-
-    Value pointQuery(Key key);
 
     void remove(Key key);
 
@@ -75,23 +82,17 @@ public:
 
     bool contains(Key key);
 
+    bool pointQuery(Key key, Value& value);
+
     int size();
 
     class Node : public serializable {
     public:
-        typedef enum {
-            LEFT,
-            RIGHT
-        } Direction;
-
-        static const int BLOCK_SIZE = 1000;
-        static const double EPSILON = 0.1;
-        static const int BUFFER_SIZE = BLOCK_SIZE * EPSILON;
-        static const int MESSAGE_SIZE = sizeof(Message);
-        static const int MAX_NUMBER_OF_MESSAGE_PER_NODE = BUFFER_SIZE / MESSAGE_SIZE;
-
-        typedef typename vector<BEpsilonTree<Key, Value, B>::Message>::iterator MessageIterator;
-        typedef typename vector<BEpsilonTree<Key, Value, B>::Node *>::iterator ChildIterator;
+        static constexpr int BLOCK_SIZE = 1000;
+        static constexpr double EPSILON = 0.1;
+        static constexpr int BUFFER_SIZE = BLOCK_SIZE * EPSILON;
+        static constexpr int MESSAGE_SIZE = sizeof(Message);
+        static constexpr int MAX_NUMBER_OF_MESSAGE_PER_NODE = BUFFER_SIZE / MESSAGE_SIZE;
 
         Node(bool isLeaf = true, NodePointer parent = NodePointer(), NodePointer right_sibling = NodePointer(),
              NodePointer left_sibling = NodePointer());
@@ -197,6 +198,8 @@ Check if node is is full, node is full when it has B children.
     //A function to find the index of this node in the his parent children vector
     //the assumption is this->parent != NULL.
     int getOrder(NodePointer p);
+
+    bool pointQuery(NodePointer p, Key key, Value& value);
 
     // A function that returns the index of the key in the parent that that point to this
     // the assumption is that parent != NULL and this node have some keys.
@@ -433,7 +436,7 @@ bool BEpsilonTree<Key, Value, B>::tryBorrowFromLeft(NodePointer p) {
         }
 
         Key key = p->isLeaf ?
-                  left_sibling->keys[left_sibling->keys.size() - 1] : p->children[0]->sub_tree_min_key;
+                  p->left_sibling->keys[p->left_sibling->keys.size() - 1] : p->children[0]->sub_tree_min_key;
         MessageIterator l_it = p->left_sibling->message_buff.begin();
         while (l_it->key < key) {
             l_it++;
@@ -468,7 +471,7 @@ bool BEpsilonTree<Key, Value, B>::tryBorrowFromRight(NodePointer p) {
         }
 
         Key key = p->isLeaf ?
-                  right_sibling->keys[0] : right_sibling->children[0]->sub_tree_min_key;
+                  p->right_sibling->keys[0] : p->right_sibling->children[0]->sub_tree_min_key;
         MessageIterator r_it = p->right_sibling->message_buff.begin();
         while (r_it->key < key) {
             r_it++;
@@ -723,40 +726,6 @@ void BEpsilonTree<Key, Value, B>::insert(Key key, Value value) {
 
 };
 
-template<typename Key, typename Value, int B>
-Value BEpsilonTree<Key, Value, B>::pointQuery(NodePointer p, Key key, Value &value) {
-    Message m(ANY, key, Value());
-    MessageIterator message_it = std::find(p->message_buff.begin(), p->message_buff.end(), m);
-    if (message_it != p->message_buff.end()) { // the key is appear in
-        switch (message_it->opcode) {
-            case REMOVE :
-                return false;
-            case INSERT :
-                value = message_it->value;
-                return true;
-            default:
-                assert("no such opcode");
-        }
-    } else if (p->isLeaf) {
-        typename vector<Key>::iterator key_it = p->keys.begin();
-        int ix = 0;
-        for (; *key_it < key && key_it != p->keys.end(); key_it++, ix++) {}
-        if (key_it != p->keys.end()) {
-            value = p->values[ix];
-            return true;
-        }
-    } else {
-        ChildIterator child_it = p->children.begin();
-        typename vector<Key>::iterator key_it = p->keys.begin();
-        while ((*key_it) <= key && key_it != p->keys.end()) {
-            child_it++;
-            key_it++;
-        }
-        Node *child = child_it != p->children.end() ? (*child_it) : p->children.back();
-        return child->pointQuery(key, value);
-    }
-    return false;
-};
 
 template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::insertMessage(NodePointer p, Opcode opcode, Key key, Value value) {
@@ -809,7 +778,7 @@ void BEpsilonTree<Key, Value, B>::bufferFlushIfFull(NodePointer p) {
         }
         int num_of_applied_message = 0;
         for (Message m : p->message_buff) {
-            if (p->isFull()) break;
+            if (isFull(p)) break;
             int ix;
             for (ix = 0; ix < p->keys.size() && p->keys[ix] < m.key; ix++) {}
             if (m.opcode == INSERT) {
@@ -822,8 +791,8 @@ void BEpsilonTree<Key, Value, B>::bufferFlushIfFull(NodePointer p) {
         }
         p->message_buff.erase(p->message_buff.begin(), p->message_buff.begin() + num_of_applied_message);
         p->sub_tree_min_key = p->keys[0];
-        p->insertKeysUpdate();
-        p->balance(NULL);
+        insertKeysUpdate(p);
+        balance(p, NodePointer());
     } else {
         MessageIterator message_it = p->message_buff.begin();
         ChildIterator child_it = p->children.begin();
@@ -845,9 +814,9 @@ void BEpsilonTree<Key, Value, B>::bufferFlushIfFull(NodePointer p) {
                       [](Message a, Message b) { return a.key < b.key; });
         }
         p->message_buff.erase(p->message_buff.begin(), p->message_buff.end());
-        Node *child = p->children.front();
-        Node *right_child = NULL;
-        while (child != NULL) {
+        NodePointer child = p->children.front();
+        NodePointer right_child;
+        while (!child.isNull()) {
             right_child = child->right_sibling;
             bufferFlushIfFull(child);
             child = right_child;
@@ -857,7 +826,7 @@ void BEpsilonTree<Key, Value, B>::bufferFlushIfFull(NodePointer p) {
 
 template<typename Key, typename Value, int B>
 bool BEpsilonTree<Key, Value, B>::isMessagesBufferFull(NodePointer p) {
-    return p->message_buff.size() >= MAX_NUMBER_OF_MESSAGE_PER_NODE;
+    return p->message_buff.size() >= Node::MAX_NUMBER_OF_MESSAGE_PER_NODE;
 };
 
 template<typename Key, typename Value, int B>
@@ -884,13 +853,50 @@ void BEpsilonTree<Key, Value, B>::printTree() {
 };
 
 template<typename Key, typename Value, int B>
-bool BEpsilonTree<Key, Value, B>::contains(Key key) {
-    try {
-        pointQuery(key);
-        return true;
-    } catch (NoSuchKeyException) {
-        return false;
+bool BEpsilonTree<Key, Value, B>::pointQuery(NodePointer p, Key key, Value& value) {
+    Message m(ANY, key, Value());
+    MessageIterator message_it = std::find(p->message_buff.begin(), p->message_buff.end(), m);
+    if(message_it != p->message_buff.end()) { // the key is appear in
+        switch(message_it->opcode) {
+            case REMOVE : return false;
+            case INSERT : value = message_it->value; return true;
+            default: assert("no such opcode");
+        }
+    } else if (p->isLeaf) {
+        typename vector<Key>::iterator key_it = p->keys.begin();
+        int ix = 0;
+        for(;*key_it < key && key_it != p->keys.end(); key_it++, ix++) {}
+        if(key_it != p->keys.end()) {
+            value = p->values[ix];
+            return true;
+        }
+    } else {
+        ChildIterator child_it = p->children.begin();
+        typename vector<Key>::iterator key_it = p->keys.begin();
+        while((*key_it) <= key && key_it != p->keys.end()) {
+            child_it++;
+            key_it++;
+        }
+        NodePointer child = child_it != p->children.end() ? (*child_it) : p->children.back();
+        return pointQuery(child, key, value);
     }
+    return false;
+}
+
+
+template<typename Key, typename Value, int B>
+bool BEpsilonTree<Key, Value, B>::pointQuery(Key key, Value& value) {
+    if(!root.isNull()) {
+        return pointQuery(root, key, value);
+    }
+    return false;
+};
+
+
+template<typename Key, typename Value, int B>
+bool BEpsilonTree<Key, Value, B>::contains(Key key) {
+    Value value;
+    return pointQuery(key, value);
 };
 
 template<typename Key, typename Value, int B>
