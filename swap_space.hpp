@@ -151,7 +151,6 @@ template<class Key> void serialize(std::iostream &fs,
     fs << "vector " << v.size() << " {" << std::endl;
     assert(fs.good());
     for (auto it = v.begin(); it != v.end(); ++it) {
-        fs << "  ";
         serialize(fs, context, (*it));
         fs << std::endl;
     }

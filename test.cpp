@@ -10,7 +10,7 @@
 #include "backing_store.hpp"
 #include <thread>         // std::this_thread::sleep_for
 #include <chrono>         // std::chrono::seconds
-#define DEFAULT_TEST_CACHE_SIZE (4)
+#define DEFAULT_TEST_CACHE_SIZE (10)
 
 void printVector(vector<int> vector) {
     for (int i = 0; i < vector.size(); i++) {
@@ -19,7 +19,7 @@ void printVector(vector<int> vector) {
     cout << endl;
 }
 
-void insertTest();
+void insertTest(int);
 
 void removeLeftToRightTest();
 
@@ -49,9 +49,16 @@ public:
 };
 
 int main() {
-    insertTest();
-    removeLeftToRightTest();
-    removeRightToLeftTest();
+    insertTest(100);
+//    uint64_t cache_size = DEFAULT_TEST_CACHE_SIZE;
+//    one_file_per_object_backing_store ofpobs("dd");
+//    swap_space sspace(&ofpobs, cache_size);
+//    BEpsilonTree<int64_t,int64_t,3> tree(&sspace);
+//    tree.insert(1,1);
+//    cout << tree.contains(1) << endl;
+//    insertTest();
+//    removeLeftToRightTest();
+//    removeRightToLeftTest();
 //    removeLeftToRightMassiveTest();
 //    removeRightToLeftMassiveTest();
 //    removeRandomMassiveTest();
@@ -104,17 +111,19 @@ int main() {
 //    cout << "done." << endl;
 //}
 //
-void insertTest() {
+void insertTest(int size) {
     cout << "entered insertTest..." << endl;
     uint64_t cache_size = DEFAULT_TEST_CACHE_SIZE;
     one_file_per_object_backing_store ofpobs("dd");
     swap_space sspace(&ofpobs, cache_size);
     BEpsilonTree<int64_t,int64_t,3> tree(&sspace);
 
-    for (int i = 0; i < 300; i++) {
+    for (int i = 0; i < size; i++) {
+        cout << "inserting " << i << endl;
         tree.insert(i, i);
     }
-    for (int i = 0; i < 300; i++) {
+    for (int i = 0; i < size; i++) {
+        cout << "looking for " << i << endl;
         assert(tree.contains(i));
     }
     cout << "done." << endl;
