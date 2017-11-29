@@ -275,6 +275,7 @@ Check if node is is full, node is full when it has B children.
 
     void updateParentKeys(NodePointer p);
 
+    static bool insertMessage(vector<Message> &buff, Message m);
 };
 
 template<typename Key, typename Value, int B>
@@ -770,11 +771,7 @@ bool BEpsilonTree<Key, Value, B>::insertMessage(NodePointer p, Opcode opcode, Ke
     for (; ix < p->message_buff.size() && p->message_buff[ix].key < key; ix++) {}
 
     if (ix < p->message_buff.size() && p->message_buff[ix].key == key) {
-        if (message.opcode == INSERT && p->message_buff[ix].opcode == REMOVE) {
-            p->message_buff[ix] = message;
-        } else if (message.opcode == REMOVE && p->message_buff[ix].opcode == INSERT) {
-            p->message_buff.erase(p->message_buff.begin() + ix);
-        }
+        p->message_buff[ix] = message;
     } else {
         p->message_buff.insert(p->message_buff.begin() + ix, message);
     }
@@ -787,13 +784,24 @@ bool BEpsilonTree<Key, Value, B>::insertMessage(NodePointer p, Opcode opcode, Ke
     return true;
 }
 
+template<typename Key, typename Value, int B>
+bool BEpsilonTree<Key, Value, B>::insertMessage(vector<Message> &buff, Message m) {
+    int ix = 0;
+    for(; ix < buff.size() && buff[ix].key < m.key; ix++);
+    if(ix < buff.size() && buff[ix].key == m.key) {
+        buff[ix] = m;
+    } else {
+        buff.insert(buff.begin() + ix, m);
+    }
+};
+
 /*
  * when the buffer got empty, we need to flush the message into the key, value buffers,
  * and then handle the node separate.*/
 template<typename Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::bufferFlushIfFull(NodePointer p) {
     if (isMessagesBufferFull(p) == false) return;
-    vector <MessageIterator> tmp;
+    vector <Message> tmp;
     if (p->isLeaf) { //i.e. leaf node.. so apply the messages.
         for (MessageIterator m = p->message_buff.begin(); m != p->message_buff.end(); m++) {
             if (m->opcode == REMOVE) {
@@ -805,11 +813,12 @@ void BEpsilonTree<Key, Value, B>::bufferFlushIfFull(NodePointer p) {
                         p->values.erase(p->values.begin() + ix);
                     }
                 }
-                tmp.push_back(m);
+                tmp.push_back(*m);
             }
         }
-        for (MessageIterator m : tmp) {
-            p->message_buff.erase(m);
+        for (Message m : tmp) {
+            MessageIterator m_it = std::find(p->message_buff.begin(), p->message_buff.end(), m);
+            p->message_buff.erase(m_it);
         }
         int num_of_applied_message = 0;
         for (Message m : p->message_buff) {
@@ -833,20 +842,15 @@ void BEpsilonTree<Key, Value, B>::bufferFlushIfFull(NodePointer p) {
         ChildIterator child_it = p->children.begin();
         for (int key_ix = 0; key_ix < p->keys.size(); key_ix++) {
             while ((message_it != p->message_buff.end()) && (message_it->key < p->keys[key_ix])) {
-                (*child_it)->message_buff.push_back(*message_it);
+                insertMessage((*child_it)->message_buff, *message_it);
                 message_it++;
             }
-            std::sort((*child_it)->message_buff.begin(),
-                      (*child_it)->message_buff.end(),
-                      [](Message a, Message b) { return a.key < b.key; });
             child_it++;
         }
         //here
         if (message_it != p->message_buff.end()) {
-            (*child_it)->message_buff.insert((*child_it)->message_buff.end(), message_it, p->message_buff.end());
-            std::sort((*child_it)->message_buff.begin(),
-                      (*child_it)->message_buff.end(),
-                      [](Message a, Message b) { return a.key < b.key; });
+            NodePointer child = *child_it;
+            insertMessage(child->message_buff, *message_it);
         }
         p->message_buff.erase(p->message_buff.begin(), p->message_buff.end());
         NodePointer child = p->children.front();
@@ -900,15 +904,15 @@ bool BEpsilonTree<Key, Value, B>::pointQuery(NodePointer p, Key key, Value& valu
     } else if (p->isLeaf) {
         typename vector<Key>::iterator key_it = p->keys.begin();
         int ix = 0;
-        for(;*key_it < key && key_it != p->keys.end(); key_it++, ix++) {}
-        if(key_it != p->keys.end()) {
+        for(;key_it != p->keys.end() && *key_it < key; key_it++, ix++) {}
+        if(key_it != p->keys.end() && *key_it == key) {
             value = p->values[ix];
             return true;
         }
     } else {
         ChildIterator child_it = p->children.begin();
         typename vector<Key>::iterator key_it = p->keys.begin();
-        while((*key_it) <= key && key_it != p->keys.end()) {
+        while(key_it != p->keys.end() && (*key_it) <= key) {
             child_it++;
             key_it++;
         }
