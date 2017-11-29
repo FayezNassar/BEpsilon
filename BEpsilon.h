@@ -158,6 +158,8 @@ private:
 
         void bufferFlushIfFull();
 
+        static void insertMessage(vector<Message> &buff, Message m);
+
         void inOrder(int indent = 0);
 
         Key minSubTreeKeyTest();
@@ -328,8 +330,8 @@ void BEpsilonTree<Key, Value, B>::Node::splitChild(int ix, BEpsilonTree<Key, Val
         first_message_it++;
     }
     right_child->message_buff.insert(right_child->message_buff.begin(),
-                                     first_message_it,
-                                     left_child->message_buff.end());
+                                                                                                      first_message_it,
+                                                                                                      left_child->message_buff.end());
     left_child->message_buff.erase(first_message_it, left_child->message_buff.end());
 
     //set the new node as a child of this node
@@ -617,15 +619,15 @@ bool BEpsilonTree<Key, Value, B>::Node::pointQuery(Key key, Value& value) {
     } else if (this->isLeaf) {
         typename vector<Key>::iterator key_it = this->keys.begin();
         int ix = 0;
-        for(;*key_it < key && key_it != this->keys.end(); key_it++, ix++) {}
-        if(key_it != this->keys.end()) {
+        for(; key_it != this->keys.end() && *key_it < key; key_it++, ix++) {}
+        if(key_it != this->keys.end() && *key_it == key) {
             value = this->values[ix];
             return true;
         }
     } else {
         ChildIterator child_it = this->children.begin();
         typename vector<Key>::iterator key_it = this->keys.begin();
-        while((*key_it) <= key && key_it != this->keys.end()) {
+        while(key_it != this->keys.end() && (*key_it) <= key) {
             child_it++;
             key_it++;
         }
@@ -648,11 +650,7 @@ bool BEpsilonTree<Key, Value, B>::Node::insertMessage(Opcode opcode, Key key, Va
     for(;ix < this->message_buff.size() && this->message_buff[ix].key < key;ix++) {}
 
     if(ix < this->message_buff.size() && this->message_buff[ix].key == key) {
-        if(message.opcode == INSERT && this->message_buff[ix].opcode == REMOVE) {
-            this->message_buff[ix] = message;
-        } else if (message.opcode == REMOVE && this->message_buff[ix].opcode == INSERT) {
-            this->message_buff.erase(this->message_buff.begin() + ix);
-        }
+        this->message_buff[ix] = message;
     } else {
         this->message_buff.insert(this->message_buff.begin() + ix, message);
     }
@@ -670,13 +668,24 @@ bool BEpsilonTree<Key, Value, B>::Node::isMessagesBufferFull() {
     return this->message_buff.size() >=  MAX_NUMBER_OF_MESSAGE_PER_NODE;
 };
 
+template <typename  Key, typename Value, int B>
+void BEpsilonTree<Key, Value, B>::Node::insertMessage(vector<Message> &buff, Message m) {
+    int ix = 0;
+    for(; ix < buff.size() && buff[ix].key < m.key; ix++);
+    if(ix < buff.size() && buff[ix].key == m.key) {
+        buff[ix] = m;
+    } else {
+        buff.insert(buff.begin() + ix, m);
+    }
+};
+
 /*
  * when the buffer got empty, we need to flush the message into the key, value buffers,
  * and then handle the node separate.*/
 template <typename  Key, typename Value, int B>
 void BEpsilonTree<Key, Value, B>::Node::bufferFlushIfFull() {
     if(this->isMessagesBufferFull() == false) return;
-    vector<MessageIterator> tmp;
+    vector<Message> tmp;
     if(this->isLeaf) { //i.e. leaf node.. so apply the messages.
         for(MessageIterator m = this->message_buff.begin(); m != this->message_buff.end(); m++) {
             if(m->opcode == REMOVE) {
@@ -687,12 +696,13 @@ void BEpsilonTree<Key, Value, B>::Node::bufferFlushIfFull() {
                         this->keys.erase(this->keys.begin() + ix);
                         this->values.erase(this->values.begin() + ix);
                     }
-                }
-                tmp.push_back(m);
+                }//here
+                tmp.push_back(*m);
             }
         }
-        for(MessageIterator m : tmp) {
-            this->message_buff.erase(m);
+        for(Message m : tmp) {
+            MessageIterator m_it = std::find(this->message_buff.begin(), this->message_buff.end(), m);
+            this->message_buff.erase(m_it);
         }
         int num_of_applied_message = 0;
         for(Message m : this->message_buff) {
@@ -715,20 +725,17 @@ void BEpsilonTree<Key, Value, B>::Node::bufferFlushIfFull() {
         ChildIterator child_it = this->children.begin();
         for(int key_ix = 0; key_ix < this->keys.size(); key_ix++) {
             while((message_it != this->message_buff.end()) && (message_it->key < this->keys[key_ix])) {
-                (*child_it)->message_buff.push_back(*message_it);
+                insertMessage((*child_it)->message_buff, *message_it);
                 message_it++;
             }
-            std::sort((*child_it)->message_buff.begin(),
-                      (*child_it)->message_buff.end(),
-                      [](Message a, Message b) {return a.key < b.key;});
             child_it++;
         }
-        //here
         if(message_it != this->message_buff.end()) {
-            (*child_it)->message_buff.insert((*child_it)->message_buff.end(), message_it, this->message_buff.end());
-            std::sort((*child_it)->message_buff.begin(),
-                      (*child_it)->message_buff.end(),
-                      [](Message a, Message b) {return a.key < b.key;});
+            Node* child = *child_it;
+            while(message_it != this->message_buff.end()) {
+                insertMessage(child->message_buff, *message_it);
+                message_it++;
+            }
         }
         this->message_buff.erase(this->message_buff.begin(), this->message_buff.end());
         Node* child = this->children.front();
