@@ -850,7 +850,10 @@ void BEpsilonTree<Key, Value, B>::bufferFlushIfFull(NodePointer p) {
         //here
         if (message_it != p->message_buff.end()) {
             NodePointer child = *child_it;
-            insertMessage(child->message_buff, *message_it);
+            while(message_it != p->message_buff.end()) {
+                insertMessage(child->message_buff, *message_it);
+                message_it++;
+            }
         }
         p->message_buff.erase(p->message_buff.begin(), p->message_buff.end());
         NodePointer child = p->children.front();
