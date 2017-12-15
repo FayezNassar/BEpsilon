@@ -10,7 +10,7 @@
 #include "backing_store.hpp"
 #include <thread>         // std::this_thread::sleep_for
 #include <chrono>         // std::chrono::seconds
-#define DEFAULT_TEST_CACHE_SIZE (10)
+#define DEFAULT_TEST_CACHE_SIZE (70000)
 
 void printVector(vector<int> vector) {
     for (int i = 0; i < vector.size(); i++) {
@@ -21,9 +21,9 @@ void printVector(vector<int> vector) {
 
 void insertTest(int);
 
-void removeLeftToRightTest();
+void removeLeftToRightTest(int);
 
-void removeRightToLeftTest();
+void removeRightToLeftTest(int);
 
 void removeLeftToRightMassiveTest();
 
@@ -49,7 +49,9 @@ public:
 };
 
 int main() {
-    insertTest(100);
+    insertTest(60000);
+//    removeLeftToRightTest(1000);
+//    removeRightToLeftTest(500);
 //    uint64_t cache_size = DEFAULT_TEST_CACHE_SIZE;
 //    one_file_per_object_backing_store ofpobs("dd");
 //    swap_space sspace(&ofpobs, cache_size);
@@ -129,19 +131,21 @@ void insertTest(int size) {
     cout << "done." << endl;
 }
 
-void removeLeftToRightTest() {
+void removeLeftToRightTest(int size) {
     cout << "entered removeLeftToRightTest..." << endl;
     uint64_t cache_size = DEFAULT_TEST_CACHE_SIZE;
     one_file_per_object_backing_store ofpobs("dd");
     swap_space sspace(&ofpobs, cache_size);
     BEpsilonTree<int64_t,int64_t,3> tree(&sspace);
 
-    for (int i = 0; i < 800; i++) {
+    for (int i = 0; i < size; i++) {
+        cout << "inserting " << i << endl;
         tree.insert(i, i);
     }
 
     int i = 0;
     while (tree.size() > 0) {
+        cout << "removing " << i << endl;
         tree.remove(i);
         assert(!tree.contains(i));
         i++;
@@ -149,19 +153,21 @@ void removeLeftToRightTest() {
     cout << "done." << endl;
 }
 
-void removeRightToLeftTest() {
+void removeRightToLeftTest(int size) {
     cout << "entered removeRightToLeftTest..." << endl;
     uint64_t cache_size = DEFAULT_TEST_CACHE_SIZE;
     one_file_per_object_backing_store ofpobs("dd");
     swap_space sspace(&ofpobs, cache_size);
     BEpsilonTree<int64_t,int64_t,3> tree(&sspace);
 
-    for (int i = 0; i < 800; i++) {
+    for (int i = 0; i < size; i++) {
+        cout << "inserting " << i << endl;
         tree.insert(i, i);
     }
 
-    int i = 800;
+    int i = size;
     while (tree.size() > 0) {
+        cout << "removing " << i << endl;
         tree.remove(i);
         assert(!tree.contains(i));
         i--;

@@ -69,7 +69,6 @@ public:
         }
 
         void _deserialize(std::iostream &fs, serialization_context &context) {
-            cout << "deserializing message" << endl;
             std::string dummy;
             int op_int;
             fs >> dummy;
@@ -81,7 +80,6 @@ public:
             fs >> dummy;
             deserialize(fs, context, value);
             fs >> dummy;
-            cout << "done." << endl;
         }
         //TODO add size function that calc the exact message size, when the Key/Value size isn't const.
     private:
