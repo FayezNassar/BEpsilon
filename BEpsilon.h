@@ -24,7 +24,7 @@ class InvalidKeyRange : public exception {
     }
 };
 
-template<typename Key, typename Value, int B>
+template<typename Key, typename Value>
 class BEpsilonTree {
 public:
     BEpsilonTree() : root(NULL),size_(0) {}
@@ -47,6 +47,9 @@ private:
 
     typedef class Node {
     public:
+        static constexpr int NODE_SIZE = 128;
+        static constexpr int NODE_META_DATA_SIZE = 13; // 3 pointers and bool.
+        static constexpr int B = (NODE_SIZE - NODE_META_DATA_SIZE)/12;
 
         typedef enum {
             left,
@@ -154,27 +157,27 @@ private:
     int size_;
 };
 
-template<typename Key, typename Value, int B>
-BEpsilonTree<Key, Value, B>::Node::Node(bool isLeaf, Node *parent, Node *right_sibling, Node *left_sibling) {
+template<typename Key, typename Value>
+BEpsilonTree<Key, Value>::Node::Node(bool isLeaf, Node *parent, Node *right_sibling, Node *left_sibling) {
     this->parent = parent;
     this->right_sibling = right_sibling;
     this->left_sibling = left_sibling;
     this->isLeaf = isLeaf;
 };
 
-template<typename Key, typename Value, int B>
-bool BEpsilonTree<Key, Value, B>::Node::isFull() {
+template<typename Key, typename Value>
+bool BEpsilonTree<Key, Value>::Node::isFull() {
     //choose the max number of key and values in each node according to the block size.
     return this->keys.size() == B;
 }
 
-template<typename Key, typename Value, int B>
-bool BEpsilonTree<Key, Value, B>::Node::isNotLegal() {
+template<typename Key, typename Value>
+bool BEpsilonTree<Key, Value>::Node::isNotLegal() {
     return this->keys.size() < B / 2;
 };
 
-template<typename Key, typename Value, int B>
-int BEpsilonTree<Key, Value, B>::Node::getKeyOrder() {
+template<typename Key, typename Value>
+int BEpsilonTree<Key, Value>::Node::getKeyOrder() {
     //for sure this node isn't root and full, we check it before this function call.
     int ix = 0;
     while (ix < this->parent->keys.size() && this->parent->keys[ix] <= this->keys[0]) {
@@ -183,11 +186,11 @@ int BEpsilonTree<Key, Value, B>::Node::getKeyOrder() {
     return ix;
 };
 
-template<typename Key, typename Value, int B>
-int BEpsilonTree<Key, Value, B>::Node::getOrder() {
+template<typename Key, typename Value>
+int BEpsilonTree<Key, Value>::Node::getOrder() {
     int ix = 0;
     //for sure this node isn't root and full, we check it before this function call.
-    typedef typename vector<BEpsilonTree<Key, Value, B>::Node *>::iterator iterator;
+    typedef typename vector<BEpsilonTree<Key, Value>::Node *>::iterator iterator;
     for (iterator it = this->parent->children.begin(); it != this->parent->children.end(); it++) {
         if ((*it) == this) {
             return ix;
@@ -197,15 +200,15 @@ int BEpsilonTree<Key, Value, B>::Node::getOrder() {
     }
 };
 
-template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::splitChild(int ix, BEpsilonTree<Key, Value, B>::Node *left_child) {
+template<typename Key, typename Value>
+void BEpsilonTree<Key, Value>::Node::splitChild(int ix, BEpsilonTree<Key, Value>::Node *left_child) {
 
     //this node is the parent of right and left child.
     // Create a new node which is going to store (child->keys.size()-1) keys of child
-    BEpsilonTree<Key, Value, B>::Node *right_child = new BEpsilonTree<Key, Value, B>::Node(left_child->isLeaf,
-                                                                                           left_child->parent,
-                                                                                           left_child->right_sibling,
-                                                                                           left_child->left_sibling);
+    BEpsilonTree<Key, Value>::Node *right_child = new BEpsilonTree<Key, Value>::Node(left_child->isLeaf,
+                                                                                     left_child->parent,
+                                                                                     left_child->right_sibling,
+                                                                                     left_child->left_sibling);
 
     //update the sibling of both child and new node, add the new node between the child and the new node.
     //if the nods is internal and not a leaf, the sibling will be NULL.
@@ -262,7 +265,7 @@ void BEpsilonTree<Key, Value, B>::Node::splitChild(int ix, BEpsilonTree<Key, Val
                                      left_child->children.end());
 
         // w/o this, compilation error, with nested template in dependent scope.
-        typedef typename vector<BEpsilonTree<Key, Value, B>::Node *>::iterator iterator;
+        typedef typename vector<BEpsilonTree<Key, Value>::Node *>::iterator iterator;
         for (iterator it = left_child->children.begin() + middle_ix + 1; it != left_child->children.end(); it++) {
             (*it)->parent = right_child;
         }
@@ -279,8 +282,8 @@ void BEpsilonTree<Key, Value, B>::Node::splitChild(int ix, BEpsilonTree<Key, Val
 };
 
 
-template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::insertKeysUpdate() {
+template<typename Key, typename Value>
+void BEpsilonTree<Key, Value>::Node::insertKeysUpdate() {
     if (this->isFull()) {
         if (this->parent == NULL) {//this is root :)
             Node *node = new Node(false);
@@ -297,8 +300,8 @@ void BEpsilonTree<Key, Value, B>::Node::insertKeysUpdate() {
     }
 };
 
-template<typename Key, typename Value, int B>
-bool BEpsilonTree<Key, Value, B>::Node::isSiblingBorrowable(Direction direction) {
+template<typename Key, typename Value>
+bool BEpsilonTree<Key, Value>::Node::isSiblingBorrowable(Direction direction) {
     if (this->parent == NULL) {
         return false;
     }
@@ -307,8 +310,8 @@ bool BEpsilonTree<Key, Value, B>::Node::isSiblingBorrowable(Direction direction)
     return sibling != NULL && sibling->parent == this->parent && sibling->keys.size() > B / 2;
 };
 
-template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::mergeKeysUpdate(int child_ix) {
+template<typename Key, typename Value>
+void BEpsilonTree<Key, Value>::Node::mergeKeysUpdate(int child_ix) {
     if (child_ix > 0) {
         this->keys.erase(this->keys.begin() + (child_ix - 1), this->keys.begin() + (child_ix - 1));
         this->children.erase(this->children.begin() + child_ix, this->children.begin() + child_ix);
@@ -318,8 +321,8 @@ void BEpsilonTree<Key, Value, B>::Node::mergeKeysUpdate(int child_ix) {
     }
 };
 
-template<typename Key, typename Value, int B>
-bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromLeft() {
+template<typename Key, typename Value>
+bool BEpsilonTree<Key, Value>::Node::tryBorrowFromLeft() {
     if (this->isSiblingBorrowable(left)) {
 
         if (this->isLeaf) {
@@ -347,8 +350,8 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromLeft() {
     return false;
 }
 
-template<typename Key, typename Value, int B>
-bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromRight() {
+template<typename Key, typename Value>
+bool BEpsilonTree<Key, Value>::Node::tryBorrowFromRight() {
     if (this->isSiblingBorrowable(right)) {
 
         if (this->isLeaf) {
@@ -374,8 +377,8 @@ bool BEpsilonTree<Key, Value, B>::Node::tryBorrowFromRight() {
     return false;
 }
 
-template<typename Key, typename Value, int B>
-bool BEpsilonTree<Key, Value, B>::Node::tryMergeWithLeft() {
+template<typename Key, typename Value>
+bool BEpsilonTree<Key, Value>::Node::tryMergeWithLeft() {
     if (!left_sibling || (left_sibling->parent != this->parent)) {
         return false;
     }
@@ -406,8 +409,8 @@ bool BEpsilonTree<Key, Value, B>::Node::tryMergeWithLeft() {
     return true;
 }
 
-template<typename Key, typename Value, int B>
-bool BEpsilonTree<Key, Value, B>::Node::tryMergeWithRight() {
+template<typename Key, typename Value>
+bool BEpsilonTree<Key, Value>::Node::tryMergeWithRight() {
     if (!right_sibling || (right_sibling->parent != this->parent)) {
         return false;
     }
@@ -438,8 +441,8 @@ bool BEpsilonTree<Key, Value, B>::Node::tryMergeWithRight() {
     return true;
 }
 
-template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::updateParentKeys() {
+template<typename Key, typename Value>
+void BEpsilonTree<Key, Value>::Node::updateParentKeys() {
     //we shouldn't move keys from node to other,
     // but we yes should update the parent key to have the minimum key in this node in the case of minimum key remove
     if (parent != NULL && this->parent->keys.size() > 0) {
@@ -459,8 +462,8 @@ void BEpsilonTree<Key, Value, B>::Node::updateParentKeys() {
 };
 
 
-template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::balance(Node *child) {
+template<typename Key, typename Value>
+void BEpsilonTree<Key, Value>::Node::balance(Node *child) {
     if (child && child->keys.size() == 0) {
         child->updateParentKeys();
         if (child->left_sibling) {
@@ -493,8 +496,8 @@ void BEpsilonTree<Key, Value, B>::Node::balance(Node *child) {
     }
 };
 
-template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::updateMinSubTreeKey(Node* node){
+template<typename Key, typename Value>
+void BEpsilonTree<Key, Value>::Node::updateMinSubTreeKey(Node* node){
     if(node->keys.size() == 0) return;
     if(node->isLeaf){
         node->sub_tree_min_key = node->keys[0];
@@ -503,8 +506,8 @@ void BEpsilonTree<Key, Value, B>::Node::updateMinSubTreeKey(Node* node){
     }
 }
 
-template<typename Key, typename Value, int B>
-bool BEpsilonTree<Key, Value, B>::Node::insert(Key key, Value value) {
+template<typename Key, typename Value>
+bool BEpsilonTree<Key, Value>::Node::insert(Key key, Value value) {
 
     //for finding the key position, we'll start with last index
     int ix = this->keys.size() - 1;
@@ -536,8 +539,8 @@ bool BEpsilonTree<Key, Value, B>::Node::insert(Key key, Value value) {
     }
 };
 
-template<typename Key, typename Value, int B>
-typename BEpsilonTree<Key, Value, B>::Node *BEpsilonTree<Key, Value, B>::Node::approximateSearch(Key key) {
+template<typename Key, typename Value>
+typename BEpsilonTree<Key, Value>::Node *BEpsilonTree<Key, Value>::Node::approximateSearch(Key key) {
     Node *res = this;
 
     while (!res->isLeaf) {
@@ -549,8 +552,8 @@ typename BEpsilonTree<Key, Value, B>::Node *BEpsilonTree<Key, Value, B>::Node::a
     return res;
 }
 
-template<typename Key, typename Value, int B>
-bool BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
+template<typename Key, typename Value>
+bool BEpsilonTree<Key, Value>::Node::remove(Key key) {
     //the position of the key in the node.
     int ix = this->keys.size() - 1;
     while (ix >= 0 && this->keys[ix] > key) {
@@ -575,8 +578,8 @@ bool BEpsilonTree<Key, Value, B>::Node::remove(Key key) {
     }
 };
 
-template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::inOrder(int indent) {
+template<typename Key, typename Value>
+void BEpsilonTree<Key, Value>::Node::inOrder(int indent) {
     if(!isLeaf) {
         this->children[this->children.size()-1]->inOrder(indent + 4);
     }
@@ -593,8 +596,8 @@ void BEpsilonTree<Key, Value, B>::Node::inOrder(int indent) {
     cout << setw(indent) << "----" << endl;
 }
 
-template<typename Key, typename Value, int B>
-Key BEpsilonTree<Key, Value, B>::Node::minSubTreeKeyTest() {
+template<typename Key, typename Value>
+Key BEpsilonTree<Key, Value>::Node::minSubTreeKeyTest() {
     Key min = this->sub_tree_min_key;
     if(!isLeaf) {
         Key minChildrenKey = this->children[0]->minSubTreeKeyTest();
@@ -612,8 +615,8 @@ Key BEpsilonTree<Key, Value, B>::Node::minSubTreeKeyTest() {
     return min;
 }
 
-template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::bPlusValidation() {
+template<typename Key, typename Value>
+void BEpsilonTree<Key, Value>::Node::bPlusValidation() {
     //root can have less than B/2 keys.
     assert((this->parent == NULL) || (this->keys.size() < B && this->keys.size() >= B/2));
     assert(std::is_sorted(this->keys.begin(),this->keys.end()));
@@ -628,8 +631,8 @@ void BEpsilonTree<Key, Value, B>::Node::bPlusValidation() {
 
 };
 
-template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::Node::RI() {
+template<typename Key, typename Value>
+void BEpsilonTree<Key, Value>::Node::RI() {
     minSubTreeKeyTest();
     bPlusValidation();
 }
@@ -641,8 +644,8 @@ void BEpsilonTree<Key, Value, B>::Node::RI() {
  * remove: A function to remove a key from the tree.s
  * */
 
-template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::insert(Key key, Value value) {
+template<typename Key, typename Value>
+void BEpsilonTree<Key, Value>::insert(Key key, Value value) {
     if (root == NULL) { // if the Tree is empty
         root = new Node(true);
         root->keys.insert(root->keys.begin(), key);
@@ -660,8 +663,8 @@ void BEpsilonTree<Key, Value, B>::insert(Key key, Value value) {
 //    root->RI();
 };
 
-template<typename Key, typename Value, int B>
-vector<Value> BEpsilonTree<Key, Value, B>::rangeQuery(Key minKey, Key maxKey) {
+template<typename Key, typename Value>
+vector<Value> BEpsilonTree<Key, Value>::rangeQuery(Key minKey, Key maxKey) {
     if (minKey > maxKey) {
         throw InvalidKeyRange();
     }
@@ -688,8 +691,8 @@ vector<Value> BEpsilonTree<Key, Value, B>::rangeQuery(Key minKey, Key maxKey) {
     return res;
 }
 
-template<typename Key, typename Value, int B>
-Value BEpsilonTree<Key, Value, B>::pointQuery(Key key) {
+template<typename Key, typename Value>
+Value BEpsilonTree<Key, Value>::pointQuery(Key key) {
     vector<Value> res = rangeQuery(key, key);
     if (!res.size()) {
         throw NoSuchKeyException();
@@ -697,8 +700,8 @@ Value BEpsilonTree<Key, Value, B>::pointQuery(Key key) {
     return res[0];
 };
 
-template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::remove(Key key) {
+template<typename Key, typename Value>
+void BEpsilonTree<Key, Value>::remove(Key key) {
     if (root != NULL) {
         if(root->remove(key)) {
             size_--;
@@ -713,15 +716,15 @@ void BEpsilonTree<Key, Value, B>::remove(Key key) {
 //    root->RI();
 };
 
-template<typename Key, typename Value, int B>
-void BEpsilonTree<Key, Value, B>::printTree() {
+template<typename Key, typename Value>
+void BEpsilonTree<Key, Value>::printTree() {
     if(root != NULL) {
         root->inOrder();
     }
 };
 
-template<typename Key, typename Value, int B>
-bool BEpsilonTree<Key, Value, B>::contains(Key key) {
+template<typename Key, typename Value>
+bool BEpsilonTree<Key, Value>::contains(Key key) {
     try{
         pointQuery(key);
         return true;
@@ -730,8 +733,8 @@ bool BEpsilonTree<Key, Value, B>::contains(Key key) {
     }
 };
 
-template<typename Key, typename Value, int B>
-int BEpsilonTree<Key, Value, B>::size() {
+template<typename Key, typename Value>
+int BEpsilonTree<Key, Value>::size() {
     return size_;
 };
 
