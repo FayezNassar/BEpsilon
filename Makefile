@@ -12,5 +12,6 @@ g++ -Wall -std=c++11 -g -O3 -o test -I /opt/intel/vtune_amplifier_2018.1.0.53534
 
 export INTEL_LIBITTNOTIFY64=/opt/intel/vtune_amplifier_2018.1.0.535340/lib64/runtime/libittnotify_collector.so
 
-g++ -Wall -c test.cpp -g -I /opt/intel/vtune_amplifier_2018.1.0.535340/include -o test.o
-g++ -g test.o -I /opt/intel/vtune_amplifier_2018.1.0.535340/include -L /opt/intel/vtune_amplifier_2018.1.0.535340/lib64 -l ittnotify -ldl  -o test
+g++ -O3 -Wall -c test.cpp -g -I /opt/intel/vtune_amplifier_2018.1.0.535340/include -o test.o
+
+g++ -O3 -g test.o -I /opt/intel/vtune_amplifier_2018.1.0.535340/include -L /opt/intel/vtune_amplifier_2018.1.0.535340/lib64 -l ittnotify -ldl  -o test
